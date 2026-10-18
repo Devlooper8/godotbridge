@@ -223,9 +223,28 @@ class ClearBreakpoints(Arguments):
     )
 
 
+class PathIndex(Arguments):
+    index: int = Field(ge=0, description="Array/packed-array element, or dictionary entry position")
+
+
+class PathProperty(Arguments):
+    property: str = Field(max_length=256, description="Property name of an object")
+
+
 class DebugVariables(Arguments):
     frame: int = Field(default=0, ge=0, le=99, description="Stack frame index; 0 is innermost")
     scope: Literal["locals", "members", "globals"] = "locals"
+    path: list[str | PathIndex | PathProperty] | None = Field(
+        default=None,
+        max_length=32,
+        description=(
+            "Drill into a variable: the variable name, then {index: n} (array element or "
+            "dictionary entry by insertion position) or {property: name} (object property)"
+        ),
+    )
+    offset: int = Field(default=0, ge=0, le=1_000_000, description="First child to return")
+    limit: int = Field(default=100, ge=1, le=200, description="Children per page")
+    depth: int = Field(default=0, ge=0, le=2, description="Inline this many levels of children")
 
 
 class DebugStep(Arguments):
@@ -410,7 +429,7 @@ OPERATIONS: dict[str, Operation] = {
     ),
     "debug.variables": Operation(
         DebugVariables,
-        "Read bounded, typed locals, members or globals of a stack frame of the stopped game.",
+        "Read the typed locals, members or globals of a stack frame of the stopped game; with path, page through the children of an array, dictionary or object.",
     ),
     "debug.continue": Operation(Empty, "Resume a game stopped at a breakpoint.", True),
     "debug.step": Operation(

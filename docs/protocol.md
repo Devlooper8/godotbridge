@@ -138,13 +138,38 @@ bridge breakpoints), `debug.clear_breakpoints` (optional `path`) and `debug.brea
 (`bridge`, `editor`, `all`: path -> sorted lines) work with or without a running game;
 the registry is applied to every later run. While the game is stopped at a breakpoint,
 `debug.stack` returns `frames` (`index` 0 innermost, `file`, `line`, `function`) and
-`debug.variables` (`frame`, `scope` of `locals`/`members`/`globals`) returns `variables`
-(`name`, typed `value`; at most 200, `truncated`). Unsupported types are
+`debug.variables` (`frame`, `scope` of `locals`/`members`/`globals`) returns `variables`,
+each `{name, type, expandable, ...}` (see below). Unsupported types are
 `{"type": ..., "supported": false, "repr": ...}`; long strings are marked `truncated`.
 `debug.continue`, `debug.step` (`kind` over/in/out) and `debug.pause` return `breaked`,
 `running` and `changed` once the game reacted (3 s). Stack, variables, step and continue
 on a game that is not stopped fail with `NOT_BREAKED`; with no game, `GAME_NOT_RUNNING`.
 Pause stops between frames, so the stack is empty until a `step` of kind `in`.
+
+### Browsing variables
+
+Every value is summarised as `type`, `expandable` and, where they apply, `class`
+(objects), `count` (arrays, dictionaries, packed arrays), `element_type` (typed arrays),
+`instance_id`, `node_name`/`node_path` (nodes), `resource_path`, `script`, and `value`
+(the typed encoding, for scalars and codec types; unsupported types carry
+`supported: false` and a bounded `repr`). A freed object is `freed: true`. Arrays and
+dictionaries are not inlined unless asked.
+
+`debug.variables` also takes `path`, `offset`, `limit` (1-200, default 100) and `depth`
+(0-2, default 0). `path` is the variable's name followed by `{"index": n}` (array,
+packed-array element, or dictionary entry by insertion position) or `{"property": name}`
+(object property), e.g. `["party", {"index": 0}, {"property": "stats"}]`. The reply then
+has `target` (summary of the addressed value), `children` (one page), `total`, `offset`,
+`limit`, `truncated` (more children than this page) and `budget_exhausted` (the reply hit
+its entry budget, so some inlined children were left out). Children are summaries plus
+`index` (arrays, dictionaries; dictionary children also carry `key`, itself a summary) or
+`name` (object properties). `depth` inlines `children` (with `child_total`,
+`children_truncated`) into each listed child; a child that contains itself is marked
+`cycle: true` and not inlined, and can still be addressed by path. Object properties
+whose script declares a custom getter are `unread: true`: reading them would run user
+code inside the debugger break, so they are never read (asking for one by path fails with
+`UNSUPPORTED_OPERATION`). Nothing is retained between calls: a path that no longer
+resolves (the game moved on and the element is gone) fails with `VARIABLE_NOT_FOUND`.
 
 ## Error code vocabulary
 
@@ -153,5 +178,5 @@ INVALID_NODE_PATH, NODE_NOT_FOUND, SCENE_NOT_FOUND, SCENE_NOT_OPEN,
 RESOURCE_NOT_FOUND, UNSUPPORTED_NODE_TYPE, UNSUPPORTED_PROPERTY,
 UNSUPPORTED_OPERATION, READ_ONLY_RESOURCE, FILE_ACCESS_DENIED, PROJECT_NOT_FOUND,
 GODOT_NOT_FOUND, TIMEOUT, EDITOR_BUSY, TRANSACTION_FAILED, CAPTURE_UNAVAILABLE,
-GAME_NOT_RUNNING, NOT_BREAKED, INTERNAL_ERROR. Some codes are reserved for future operations. Error details may
+GAME_NOT_RUNNING, NOT_BREAKED, VARIABLE_NOT_FOUND, INTERNAL_ERROR. Some codes are reserved for future operations. Error details may
 contain bounded worker diagnostics; credentials are never included.

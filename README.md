@@ -77,7 +77,7 @@ Screenshots are returned as MCP image content and structured artifact metadata.
 | Editor screenshot | Pixels from the public editor 3D viewport |
 | Auxiliary preview | Isolated geometry/light rendering with configurable viewpoints |
 | Managed game | Real running scene, bounded stdout/stderr, lifecycle and runtime PNG |
-| Editor play | Public play/stop/status APIs, live node inspection (`runtime tree/inspect/get/set`, runtime-only edits), breakpoints, stack, variables, stepping and pause (`debug ...`, no expression evaluation) plus the game's debugger log stream (print, warnings, errors) via `game logs --mode editor`; managed stdout capture is separate |
+| Editor play | Public play/stop/status APIs, live node inspection (`runtime tree/inspect/get/set`, runtime-only edits), breakpoints, stack, nested variable browsing, stepping and pause (`debug ...`, no expression evaluation) plus the game's debugger log stream (print, warnings, errors) via `game logs --mode editor`; managed stdout capture is separate |
 
 Mutations follow the editor's rules. Inherited-scene nodes accept property and
 transform overrides and new children, but cannot be deleted, renamed, reparented

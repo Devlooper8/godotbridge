@@ -1370,6 +1370,40 @@
     "type": "object"
   },
   "debug.variables": {
+    "$defs": {
+      "PathIndex": {
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "description": "Array/packed-array element, or dictionary entry position",
+            "minimum": 0,
+            "title": "Index",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "index"
+        ],
+        "title": "PathIndex",
+        "type": "object"
+      },
+      "PathProperty": {
+        "additionalProperties": false,
+        "properties": {
+          "property": {
+            "description": "Property name of an object",
+            "maxLength": 256,
+            "title": "Property",
+            "type": "string"
+          }
+        },
+        "required": [
+          "property"
+        ],
+        "title": "PathProperty",
+        "type": "object"
+      }
+    },
     "additionalProperties": false,
     "properties": {
       "frame": {
@@ -1389,6 +1423,57 @@
         ],
         "title": "Scope",
         "type": "string"
+      },
+      "path": {
+        "anyOf": [
+          {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/$defs/PathIndex"
+                },
+                {
+                  "$ref": "#/$defs/PathProperty"
+                }
+              ]
+            },
+            "maxItems": 32,
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Drill into a variable: the variable name, then {index: n} (array element or dictionary entry by insertion position) or {property: name} (object property)",
+        "title": "Path"
+      },
+      "offset": {
+        "default": 0,
+        "description": "First child to return",
+        "maximum": 1000000,
+        "minimum": 0,
+        "title": "Offset",
+        "type": "integer"
+      },
+      "limit": {
+        "default": 100,
+        "description": "Children per page",
+        "maximum": 200,
+        "minimum": 1,
+        "title": "Limit",
+        "type": "integer"
+      },
+      "depth": {
+        "default": 0,
+        "description": "Inline this many levels of children",
+        "maximum": 2,
+        "minimum": 0,
+        "title": "Depth",
+        "type": "integer"
       }
     },
     "title": "DebugVariables",

@@ -76,6 +76,7 @@ godotctl game run --mode editor --scene res://scenes/main.tscn
 godotctl debug status
 godotctl debug stack
 godotctl debug variables [--frame 0] [--scope locals|members|globals]
+godotctl debug variables --path 'party[0].stats' [--offset 0] [--limit 100] [--depth 1]
 godotctl debug step [--kind over|in|out]
 godotctl debug continue
 godotctl debug pause
@@ -88,6 +89,14 @@ also lists breakpoints the script editor reported. `stack`, `variables`, `step` 
 `continue` need a game stopped at a breakpoint (`NOT_BREAKED` otherwise); `status` shows
 `breaked`. Values are typed as in [protocol](protocol.md); unsupported types carry a
 `repr`. `pause` stops between frames, so `stack` is empty until `step --kind in`.
+`--path` drills into a variable with a dotted/bracket syntax: the variable name, then
+`[n]` for an array element (or the n-th dictionary entry in insertion order) and `.name`
+for an object property, e.g. `inventory[2].stats[0]`. Children are paged
+(`--offset`/`--limit`, at most 200) and `--depth 1|2` inlines children. Each value shows
+`type`, `count`, `expandable`, and `value` for scalars; dictionary children also show their
+`key`. Properties with a custom getter are shown as `unread` and never read, freed objects
+as `freed`, and self-referencing containers as `cycle`. A path that no longer resolves
+fails with `VARIABLE_NOT_FOUND`. See [protocol](protocol.md#browsing-variables).
 There is deliberately no expression evaluation. Execution control relies on engine
 internals that Godot does not document; the tests fail if an update breaks them.
 

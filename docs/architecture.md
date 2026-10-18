@@ -155,7 +155,20 @@ unreliable on 4.7.2, see PROGRESS.md) over the same plugin/autoload channel.
   `Engine.capture_script_backtraces(true)`. The handler's own frames sit on top and are
   dropped by script path (`res://addons/godot_bridge/`), not by position. Values go
   through `codec.gd` (unsupported types are marked `supported: false` with a bounded
-  `repr`); at most 200 variables per scope and 2,000 characters per string.
+  `repr`).
+- **Drill-down** (`runtime/variable_browser.gd`) is lazy and path based, with no handles
+  held between calls (calls are short-lived and the game may resume in between): each
+  request re-captures the backtrace and walks `path` (variable name, then `{index}` for
+  array elements and dictionary entries by insertion position, `{property}` for object
+  properties). A path that no longer resolves is `VARIABLE_NOT_FOUND`. Children are paged
+  (`offset`, `limit` up to 200), `depth` 0-2 inlines children, and a reply is bounded by
+  an entry budget (500) and a character budget, reported as `budget_exhausted`.
+  Containers or objects that contain themselves are marked `cycle` (compared with
+  `is_same`) and never inlined. Objects list `EDITOR`/`STORAGE`/script properties; freed
+  objects are marked `freed`. Script variables with a custom `get` accessor (found by
+  reading the script source) are listed as `unread` and never read, because the read would
+  run user code inside the break. Godot's own break handling evaluates getters when it
+  synchronises frame variables with the editor, which the bridge cannot prevent.
 - **Execution control** sends Godot's internal debugger commands with
   `EditorDebuggerSession.send_message`. They are not a documented API; they are confined
   to the `ENGINE_COMMANDS` table in `debugger_plugin.gd`, and `test_debug_control.py`

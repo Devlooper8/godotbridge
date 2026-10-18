@@ -48,7 +48,9 @@ The `godot_runtime_*` tools act on the live nodes of a game started with
 game only. They fail with `GAME_NOT_RUNNING` when no editor-played game exists.
 
 The `godot_debug_*` tools set breakpoints (applied to the running and later editor-played
-games) and read the stack and typed variables of, resume, step or pause that game. They
+games) and read the stack and typed variables of, resume, step or pause that game. `godot_debug_variables` takes an optional `path` (variable name, then `{"index": n}` or
+`{"property": name}` segments), `offset`, `limit` and `depth` to browse arrays,
+dictionaries and objects page by page. They
 cannot evaluate expressions. Stack, variables and stepping need a game stopped at a
 breakpoint (`NOT_BREAKED`).
 

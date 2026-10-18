@@ -4,9 +4,8 @@ extends RefCounted
 ## only, typed values through codec.gd. Changes are runtime-only and never saved.
 
 const Codec = preload("../codec.gd")
+const Browser = preload("variable_browser.gd")
 const BRIDGE_DIR := "res://addons/godot_bridge/"
-const MAX_VARIABLES := 200
-const MAX_STRING := 2000
 const MAX_TREE_NODES := 5000 # 10,000 nodes overflowed the debugger channel in testing.
 
 static func failure(code: String, message: String) -> Dictionary:
@@ -105,14 +104,6 @@ static func user_frames() -> Array:
 				frames.append({"backtrace": backtrace, "index": index})
 	return frames
 
-static func encode_value(value: Variant) -> Variant:
-	var encoded = Codec.encode(value)
-	if encoded is String and encoded.length() > MAX_STRING:
-		return {"type": "String", "truncated": true, "value": encoded.left(MAX_STRING)}
-	if encoded is Dictionary and encoded.get("supported", true) == false:
-		encoded.repr = str(value).left(MAX_STRING)
-	return encoded
-
 static func stack() -> Dictionary:
 	var frames := []
 	for entry in user_frames():
@@ -131,23 +122,21 @@ static func variables(params: Dictionary) -> Dictionary:
 	var backtrace: ScriptBacktrace = frames[frame].backtrace
 	var index: int = frames[frame].index
 	var scope: String = params.get("scope", "locals")
-	var count := 0
+	var roots := []
 	match scope:
 		"locals":
-			count = backtrace.get_local_variable_count(index)
+			for variable in backtrace.get_local_variable_count(index):
+				roots.append({"name": backtrace.get_local_variable_name(index, variable), "value": backtrace.get_local_variable_value(index, variable)})
 		"members":
-			count = backtrace.get_member_variable_count(index)
+			for variable in backtrace.get_member_variable_count(index):
+				roots.append({"name": backtrace.get_member_variable_name(index, variable), "value": backtrace.get_member_variable_value(index, variable)})
 		"globals":
-			count = backtrace.get_global_variable_count()
+			for variable in backtrace.get_global_variable_count():
+				roots.append({"name": backtrace.get_global_variable_name(variable), "value": backtrace.get_global_variable_value(variable)})
 		_:
 			return failure("INVALID_ARGUMENT", "Scope must be locals, members or globals.")
-	var result := []
-	for variable in mini(count, MAX_VARIABLES):
-		match scope:
-			"locals":
-				result.append({"name": backtrace.get_local_variable_name(index, variable), "value": encode_value(backtrace.get_local_variable_value(index, variable))})
-			"members":
-				result.append({"name": backtrace.get_member_variable_name(index, variable), "value": encode_value(backtrace.get_member_variable_value(index, variable))})
-			_:
-				result.append({"name": backtrace.get_global_variable_name(variable), "value": encode_value(backtrace.get_global_variable_value(variable))})
-	return success({"frame": frame, "scope": scope, "variables": result, "truncated": count > MAX_VARIABLES})
+	var reply := Browser.browse(roots, params)
+	if reply.ok:
+		reply.result.frame = frame
+		reply.result.scope = scope
+	return reply
