@@ -1,0 +1,9 @@
+include LICENSE
+include PROGRESS.md
+recursive-include addons *.gd *.cfg *.json
+recursive-include docs *.md *.png
+recursive-include examples *.py *.godot *.tscn *.gd *.md
+prune examples/3d_demo/.godot
+prune examples/3d_demo/addons
+recursive-include tests *.py
+recursive-include scripts *.py

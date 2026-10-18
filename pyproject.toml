@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "godotbridge"
+version = "0.1.0"
+description = "Authenticated Godot 4 editor automation for CLI and MCP clients"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = ["typer>=0.16,<1", "rich>=13,<15", "pydantic>=2.10,<3", "mcp>=2.0,<3"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.12", "build>=1"]
+
+[project.scripts]
+godotctl = "godotbridge.cli:main"
+godotbridge-mcp = "godotbridge.mcp_server:main"
+
+[tool.setuptools.packages.find]
+where = ["python"]
+
+[tool.setuptools.package-data]
+godotbridge = ["py.typed", "addon/*", "addon/dock/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["python"]
+markers = ["engine: launches an actual Godot editor", "graphical: requires a functioning graphics driver"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501", "B008"]

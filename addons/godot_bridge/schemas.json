@@ -1,0 +1,1031 @@
+{
+  "project.info": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "Empty",
+    "type": "object"
+  },
+  "editor.status": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "Empty",
+    "type": "object"
+  },
+  "scene.list": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "Empty",
+    "type": "object"
+  },
+  "scene.current": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "Empty",
+    "type": "object"
+  },
+  "scene.close": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "Empty",
+    "type": "object"
+  },
+  "scene.tree": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "Empty",
+    "type": "object"
+  },
+  "scene.open": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "description": "Project-relative res:// path to a .tscn scene",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "title": "ScenePath",
+    "type": "object"
+  },
+  "scene.create": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "description": "Project-relative res:// path to a .tscn scene",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      },
+      "root": {
+        "default": "Node3D",
+        "enum": [
+          "Node",
+          "Node3D",
+          "MeshInstance3D",
+          "StaticBody3D",
+          "RigidBody3D",
+          "CharacterBody3D",
+          "CollisionShape3D",
+          "Camera3D",
+          "DirectionalLight3D",
+          "OmniLight3D",
+          "SpotLight3D",
+          "WorldEnvironment",
+          "Marker3D",
+          "RayCast3D",
+          "Area3D"
+        ],
+        "title": "Root",
+        "type": "string"
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "title": "SceneCreate",
+    "type": "object"
+  },
+  "scene.save": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "Empty",
+    "type": "object"
+  },
+  "scene.save_as": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "description": "Project-relative res:// path to a .tscn scene",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "title": "ScenePath",
+    "type": "object"
+  },
+  "node.create": {
+    "additionalProperties": false,
+    "properties": {
+      "type": {
+        "default": "Node3D",
+        "enum": [
+          "Node",
+          "Node3D",
+          "MeshInstance3D",
+          "StaticBody3D",
+          "RigidBody3D",
+          "CharacterBody3D",
+          "CollisionShape3D",
+          "Camera3D",
+          "DirectionalLight3D",
+          "OmniLight3D",
+          "SpotLight3D",
+          "WorldEnvironment",
+          "Marker3D",
+          "RayCast3D",
+          "Area3D"
+        ],
+        "title": "Type",
+        "type": "string"
+      },
+      "name": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "parent": {
+        "default": ".",
+        "title": "Parent",
+        "type": "string"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "title": "NodeCreate",
+    "type": "object"
+  },
+  "node.delete": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "default": ".",
+        "description": "Path relative to edited scene root; '.' is root",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      }
+    },
+    "title": "NodePath",
+    "type": "object"
+  },
+  "node.rename": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "default": ".",
+        "description": "Path relative to edited scene root; '.' is root",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      },
+      "name": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "title": "NodeRename",
+    "type": "object"
+  },
+  "node.duplicate": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "default": ".",
+        "description": "Path relative to edited scene root; '.' is root",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      },
+      "name": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Name"
+      }
+    },
+    "title": "NodeDuplicate",
+    "type": "object"
+  },
+  "node.reparent": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "default": ".",
+        "description": "Path relative to edited scene root; '.' is root",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      },
+      "parent": {
+        "title": "Parent",
+        "type": "string"
+      },
+      "keep_global": {
+        "default": true,
+        "title": "Keep Global",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "parent"
+    ],
+    "title": "NodeReparent",
+    "type": "object"
+  },
+  "node.inspect": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "default": ".",
+        "description": "Path relative to edited scene root; '.' is root",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      }
+    },
+    "title": "NodePath",
+    "type": "object"
+  },
+  "node.properties": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "default": ".",
+        "description": "Path relative to edited scene root; '.' is root",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      }
+    },
+    "title": "NodePath",
+    "type": "object"
+  },
+  "node.get_property": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "default": ".",
+        "description": "Path relative to edited scene root; '.' is root",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      },
+      "property": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Property",
+        "type": "string"
+      }
+    },
+    "required": [
+      "property"
+    ],
+    "title": "Property",
+    "type": "object"
+  },
+  "node.set_property": {
+    "$defs": {
+      "JsonValue": {}
+    },
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "default": ".",
+        "description": "Path relative to edited scene root; '.' is root",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      },
+      "property": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Property",
+        "type": "string"
+      },
+      "value": {
+        "$ref": "#/$defs/JsonValue"
+      }
+    },
+    "required": [
+      "property",
+      "value"
+    ],
+    "title": "SetProperty",
+    "type": "object"
+  },
+  "node.set_transform": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "default": ".",
+        "description": "Path relative to edited scene root; '.' is root",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      },
+      "position": {
+        "anyOf": [
+          {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "maximum": 1000000000,
+                "minimum": -1000000000,
+                "type": "number"
+              },
+              {
+                "maximum": 1000000000,
+                "minimum": -1000000000,
+                "type": "number"
+              },
+              {
+                "maximum": 1000000000,
+                "minimum": -1000000000,
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Position"
+      },
+      "rotation": {
+        "anyOf": [
+          {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "maximum": 1000000000,
+                "minimum": -1000000000,
+                "type": "number"
+              },
+              {
+                "maximum": 1000000000,
+                "minimum": -1000000000,
+                "type": "number"
+              },
+              {
+                "maximum": 1000000000,
+                "minimum": -1000000000,
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Euler angles in degrees (Godot YXZ order)",
+        "title": "Rotation"
+      },
+      "scale": {
+        "anyOf": [
+          {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "maximum": 1000000000,
+                "minimum": -1000000000,
+                "type": "number"
+              },
+              {
+                "maximum": 1000000000,
+                "minimum": -1000000000,
+                "type": "number"
+              },
+              {
+                "maximum": 1000000000,
+                "minimum": -1000000000,
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Scale"
+      },
+      "world": {
+        "default": false,
+        "title": "World",
+        "type": "boolean"
+      },
+      "translate": {
+        "default": false,
+        "title": "Translate",
+        "type": "boolean"
+      }
+    },
+    "title": "Transform",
+    "type": "object"
+  },
+  "editor.select": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "default": ".",
+        "description": "Path relative to edited scene root; '.' is root",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      }
+    },
+    "title": "NodePath",
+    "type": "object"
+  },
+  "editor.focus": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "default": ".",
+        "description": "Path relative to edited scene root; '.' is root",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      }
+    },
+    "title": "NodePath",
+    "type": "object"
+  },
+  "editor.diagnostics": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "Empty",
+    "type": "object"
+  },
+  "editor.undo": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "Empty",
+    "type": "object"
+  },
+  "editor.redo": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "Empty",
+    "type": "object"
+  },
+  "3d.create_primitive": {
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "parent": {
+        "default": ".",
+        "title": "Parent",
+        "type": "string"
+      },
+      "kind": {
+        "default": "box",
+        "enum": [
+          "box",
+          "sphere",
+          "cylinder",
+          "plane"
+        ],
+        "title": "Kind",
+        "type": "string"
+      },
+      "size": {
+        "default": [
+          1,
+          1,
+          1
+        ],
+        "maxItems": 3,
+        "minItems": 3,
+        "prefixItems": [
+          {
+            "exclusiveMinimum": 0,
+            "maximum": 100000,
+            "type": "number"
+          },
+          {
+            "exclusiveMinimum": 0,
+            "maximum": 100000,
+            "type": "number"
+          },
+          {
+            "exclusiveMinimum": 0,
+            "maximum": 100000,
+            "type": "number"
+          }
+        ],
+        "title": "Size",
+        "type": "array"
+      },
+      "radius": {
+        "default": 0.5,
+        "exclusiveMinimum": 0,
+        "maximum": 100000,
+        "title": "Radius",
+        "type": "number"
+      },
+      "height": {
+        "default": 1,
+        "exclusiveMinimum": 0,
+        "maximum": 100000,
+        "title": "Height",
+        "type": "number"
+      },
+      "color": {
+        "default": [
+          0.55,
+          0.65,
+          0.8,
+          1
+        ],
+        "maxItems": 4,
+        "minItems": 4,
+        "prefixItems": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "number"
+          }
+        ],
+        "title": "Color",
+        "type": "array"
+      },
+      "collision": {
+        "default": true,
+        "title": "Collision",
+        "type": "boolean"
+      },
+      "position": {
+        "default": [
+          0,
+          0,
+          0
+        ],
+        "maxItems": 3,
+        "minItems": 3,
+        "prefixItems": [
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          },
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          },
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          }
+        ],
+        "title": "Position",
+        "type": "array"
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "title": "Primitive",
+    "type": "object"
+  },
+  "3d.create_light": {
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "default": "Light",
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "parent": {
+        "default": ".",
+        "title": "Parent",
+        "type": "string"
+      },
+      "type": {
+        "default": "directional",
+        "enum": [
+          "directional",
+          "omni",
+          "spot"
+        ],
+        "title": "Type",
+        "type": "string"
+      },
+      "color": {
+        "default": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "maxItems": 4,
+        "minItems": 4,
+        "prefixItems": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "number"
+          }
+        ],
+        "title": "Color",
+        "type": "array"
+      },
+      "energy": {
+        "default": 1,
+        "maximum": 1000,
+        "minimum": 0,
+        "title": "Energy",
+        "type": "number"
+      },
+      "position": {
+        "default": [
+          0,
+          5,
+          0
+        ],
+        "maxItems": 3,
+        "minItems": 3,
+        "prefixItems": [
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          },
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          },
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          }
+        ],
+        "title": "Position",
+        "type": "array"
+      },
+      "rotation": {
+        "default": [
+          -45,
+          -30,
+          0
+        ],
+        "maxItems": 3,
+        "minItems": 3,
+        "prefixItems": [
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          },
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          },
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          }
+        ],
+        "title": "Rotation",
+        "type": "array"
+      }
+    },
+    "title": "Light",
+    "type": "object"
+  },
+  "3d.create_camera": {
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "default": "MainCamera",
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "parent": {
+        "default": ".",
+        "title": "Parent",
+        "type": "string"
+      },
+      "position": {
+        "default": [
+          10,
+          8,
+          12
+        ],
+        "maxItems": 3,
+        "minItems": 3,
+        "prefixItems": [
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          },
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          },
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          }
+        ],
+        "title": "Position",
+        "type": "array"
+      },
+      "target": {
+        "default": [
+          0,
+          0,
+          0
+        ],
+        "maxItems": 3,
+        "minItems": 3,
+        "prefixItems": [
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          },
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          },
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          }
+        ],
+        "title": "Target",
+        "type": "array"
+      },
+      "fov": {
+        "default": 70,
+        "exclusiveMaximum": 179,
+        "exclusiveMinimum": 1,
+        "title": "Fov",
+        "type": "number"
+      },
+      "current": {
+        "default": true,
+        "title": "Current",
+        "type": "boolean"
+      }
+    },
+    "title": "Camera",
+    "type": "object"
+  },
+  "editor.camera_info": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "Empty",
+    "type": "object"
+  },
+  "viewport.capture": {
+    "additionalProperties": false,
+    "properties": {
+      "method": {
+        "default": "preview",
+        "enum": [
+          "preview",
+          "editor"
+        ],
+        "title": "Method",
+        "type": "string"
+      },
+      "width": {
+        "default": 960,
+        "maximum": 2048,
+        "minimum": 64,
+        "title": "Width",
+        "type": "integer"
+      },
+      "height": {
+        "default": 640,
+        "maximum": 2048,
+        "minimum": 64,
+        "title": "Height",
+        "type": "integer"
+      },
+      "viewpoint": {
+        "default": "perspective",
+        "enum": [
+          "perspective",
+          "top",
+          "front",
+          "side",
+          "custom"
+        ],
+        "title": "Viewpoint",
+        "type": "string"
+      },
+      "position": {
+        "default": [
+          15,
+          13,
+          18
+        ],
+        "maxItems": 3,
+        "minItems": 3,
+        "prefixItems": [
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          },
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          },
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          }
+        ],
+        "title": "Position",
+        "type": "array"
+      },
+      "target": {
+        "default": [
+          0,
+          0,
+          0
+        ],
+        "maxItems": 3,
+        "minItems": 3,
+        "prefixItems": [
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          },
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          },
+          {
+            "maximum": 1000000000,
+            "minimum": -1000000000,
+            "type": "number"
+          }
+        ],
+        "title": "Target",
+        "type": "array"
+      },
+      "distance": {
+        "default": 25,
+        "exclusiveMinimum": 0,
+        "maximum": 100000,
+        "title": "Distance",
+        "type": "number"
+      },
+      "viewport": {
+        "default": 0,
+        "maximum": 3,
+        "minimum": 0,
+        "title": "Viewport",
+        "type": "integer"
+      },
+      "output": {
+        "default": "viewport.png",
+        "title": "Output",
+        "type": "string"
+      }
+    },
+    "title": "CaptureOutput",
+    "type": "object"
+  },
+  "game.run": {
+    "additionalProperties": false,
+    "properties": {
+      "mode": {
+        "default": "managed",
+        "enum": [
+          "managed",
+          "editor"
+        ],
+        "title": "Mode",
+        "type": "string"
+      },
+      "scene": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Scene"
+      },
+      "current": {
+        "default": false,
+        "title": "Current",
+        "type": "boolean"
+      },
+      "headless": {
+        "default": false,
+        "title": "Headless",
+        "type": "boolean"
+      },
+      "max_seconds": {
+        "default": 3600,
+        "exclusiveMinimum": 0,
+        "maximum": 86400,
+        "title": "Max Seconds",
+        "type": "number"
+      }
+    },
+    "title": "GameRun",
+    "type": "object"
+  },
+  "game.stop": {
+    "additionalProperties": false,
+    "properties": {
+      "mode": {
+        "default": "managed",
+        "enum": [
+          "managed",
+          "editor"
+        ],
+        "title": "Mode",
+        "type": "string"
+      }
+    },
+    "title": "GameMode",
+    "type": "object"
+  },
+  "game.status": {
+    "additionalProperties": false,
+    "properties": {
+      "mode": {
+        "default": "managed",
+        "enum": [
+          "managed",
+          "editor"
+        ],
+        "title": "Mode",
+        "type": "string"
+      }
+    },
+    "title": "GameMode",
+    "type": "object"
+  }
+}
