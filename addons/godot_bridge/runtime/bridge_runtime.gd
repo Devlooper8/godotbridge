@@ -61,6 +61,10 @@ func _ready() -> void:
 	if Engine.is_editor_hint() or not EngineDebugger.is_active():
 		set_process(false)
 		return
+	# A step from a pause (outside any script) stops at the next script line; running after every other node
+	# keeps that line in the game's code instead of this autoload's _process.
+	process_priority = 1000000
+	process_physics_priority = 1000000
 	bridge_logger = BridgeLogger.new()
 	OS.add_logger(bridge_logger)
 	EngineDebugger.register_message_capture("godotbridge", _on_message)
@@ -72,7 +76,13 @@ func _on_message(message: String, data: Array) -> bool:
 		return true
 	var root := get_tree().current_scene
 	var reply: Dictionary
-	if root == null:
+	if message == "ping":
+		reply = Inspector.success({})
+	elif message == "stack":
+		reply = Inspector.stack()
+	elif message == "variables":
+		reply = Inspector.variables(data[1])
+	elif root == null:
 		reply = Inspector.failure("SCENE_NOT_FOUND", "The game has no running scene yet.")
 	elif message == "tree":
 		reply = Inspector.tree(root, data[1])

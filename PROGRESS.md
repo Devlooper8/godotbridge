@@ -40,7 +40,7 @@
 - Scene-mutation milestones (scripted nodes, instances, inherited scenes; 16 new integration tests): headless **72 passed, 1 skipped**; graphical **73 passed** (one unrelated managed-game test failed once on the first run and passed on rerun and in isolation).
 - Scene-mutation fixes (ownership restore, dependency scan, integer exports, unsaved inherited scenes; 9 more integration tests): headless **85 passed, 5 skipped** (graphical-only), graphical **90 passed**.
 - Unit-only: `python -m pytest tests/unit -q` — **13 passed**.
-- Debugger milestones (editor-play logs, runtime inspection; no breakpoint control): headless `python scripts/run_integration_tests.py` — **76 passed, 5 skipped** (editor-play tests need a display); graphical `--graphical` — **81 passed**; unit **13 passed**; Ruff lint and format clean. The editor logs contain no GDScript script or parse errors.
+- Debugger milestones (editor-play logs, runtime inspection, breakpoints/stack/variables/stepping): headless `python scripts/run_integration_tests.py` — **86 passed, 8 skipped** (editor-play tests need a display); graphical `--graphical` — **94 passed**; unit **13 passed**; Ruff lint and format clean. The editor logs contain no GDScript script or parse errors.
 - Installed-wheel graphical verification: `python -m pytest -o pythonpath=.artifacts/wheel-final tests/integration/test_connection.py tests/integration/test_mcp.py tests/integration/test_three_d.py --engine --graphical --basetemp .artifacts/pytest-wheel-final -q` — **10 passed**. This exercised the installed package's bundled addon against the real engine.
 - Both documented CLI and Python arena workflows executed, including save, validation, reopen and snapshot.
 - `godotctl --project examples/3d_demo --timeout 60 project validate --json` — valid; no project errors.
@@ -56,8 +56,9 @@
 - Script variables are type-checked, not range/enum-checked; only scalar, vector, color, NodePath and simple-resource values are encodable. No cross-command atomic transaction API.
 - Preview omits animation, particles, skinning, gameplay and WorldEnvironment.
 - Editor camera is readable; framing uses the separate preview camera. Focus selects/switches workspace without moving the camera.
-- Editor-play debugging: logs (`game logs --mode editor`) and live node inspection (`runtime.*`) work through the `GodotBridgeRuntime` autoload, which the plugin adds to `project.godot` (inert in exports and managed runs). Breakpoint control, stack and variable inspection are **not implemented**: see "Debugger findings" below. Script authoring and C# compilation are not implemented either.
+- Editor-play debugging: logs (`game logs --mode editor`) and live node inspection (`runtime.*`) work through the `GodotBridgeRuntime` autoload, which the plugin adds to `project.godot` (inert in exports and managed runs). Breakpoints, stack, variables, stepping and pause work over the same channel (no DAP, no `evaluate`); see "Debugger findings".
 - Runtime trees are capped at 5,000 nodes (10,000 overflowed the debugger channel); requests time out after 5 s; with several simultaneously played instances the first active session answers. Editor log ring holds 5,000 entries, the game queues 2,000 between frames.
+- Execution control uses undocumented engine command names (isolated in `ENGINE_COMMANDS`, covered by tests). `debug.variables` encodes scalar, vector, color, transform and simple-resource values; other types are marked unsupported with a `repr`. Breakpoints set in the script editor before the plugin loaded are not listed (they are still hit).
 - Godot's own debug adapter (default 127.0.0.1:6006) is unauthenticated; it is documented in security.md and not used.
 - Managed runtime uses a custom SceneTree and isolated user://; custom-main-loop projects should use editor mode.
 - Current scene discovery requires the plugin; main/explicit scene runs work offline through supported engine APIs.
@@ -65,22 +66,18 @@
 
 ## Debugger findings (Godot 4.7.2, empirical)
 
-Editor DAP server: runs by default in graphical and headless editors, listens on 127.0.0.1 only, setting `network/debug_adapter/remote_port` (6006; also `request_timeout` 5000, `sync_breakpoints` false). `setBreakpoints` needs absolute filesystem paths (`res://` is rejected as `wrong_path`). A stateless connect-request-disconnect design was tried:
+Why not the editor's Debug Adapter (DAP): its server runs by default in graphical and headless editors on 127.0.0.1:6006 (`network/debug_adapter/remote_port`), unauthenticated. A stateless connect-request-disconnect client keeps the game running and its breakpoints persist, but after any client has requested `scopes`/`variables`/`evaluate` (or stepped), later connections get an empty `stackTrace`, and `stepIn`/`stepOut` could leave a connection unanswered. The bridge uses its own authenticated channel and never talks to DAP.
 
-1. Closing the connection, with or without `disconnect`, leaves the game running (yes).
-2. Breakpoints set through DAP persist in the editor after disconnect and are hit by a later run (yes).
-3. A fresh connection can read `threads`/`stackTrace`/`scopes`/`variables` of a stopped game, but only until some client has requested `scopes`/`variables`/`evaluate` or stepped: afterwards new connections get an empty `stackTrace` (and `scopes` is empty) until the next break. **Not reliable.**
-4. `continue`, `next` and `pause` work from a fresh connection; `stepIn`/`stepOut` can leave the connection unanswered (all later requests time out), e.g. `stepOut` from a frame inside `work()` returned no response and did not resume.
-5. `evaluate` is supported (`local_a + 1` returned 11). It runs arbitrary GDScript expressions, so it would need an explicit opt-in if exposed.
+What the DAP-free design relies on, all verified here:
 
-Godot also logs engine errors for DAP breakpoints on scripts that are not open in the script editor (`Couldn't find the given section ... key "state"`).
-
-Proposed alternative (verified in a throwaway experiment, not committed): do it without DAP over the bridge's existing authenticated channel. Breakpoints via `EditorDebuggerSession.set_breakpoint`; stack, locals and members from the autoload capture using `Engine.capture_script_backtraces(true)` (frame 0 is the handler itself; the paused script's frames, locals and members follow, confirmed at a breakpoint); `continue`/`next` by `EditorDebuggerSession.send_message("continue", [])` and `("next", [])` (worked; this relies on engine-internal command names, not a documented API). It adds no listener and no unauthenticated surface. The other option is a supervisor-held persistent DAP session, which needs a long-lived process and still inherits the quirks above.
+- `EditorDebuggerSession.set_breakpoint` makes a running game break; with no active session it is not applied to the next run, so the bridge keeps a registry and applies it when the session starts. Bridge-set breakpoints do not trigger `_breakpoint_set_in_tree`.
+- Debugger captures are serviced while the game is stopped, and `Engine.capture_script_backtraces(true)` called from the handler shows the stopped script's frames, locals and members beneath the handler's own frames.
+- Engine commands `continue`, `next`, `step`, `out`, `break` work through `EditorDebuggerSession.send_message`. `break` stops between frames with no script frames (the next `step` in stops in game code); sending it while the game was still starting up crashed the editor, so the bridge pings the game first.
 
 ## Exact next tasks
 
 - Run `.github/workflows/ci.yml` on Linux/macOS/Python 3.11 before labeling the release stable; inspect permission setup, application-bundle discovery and Xvfb captures on those hosts.
 - Add atomic multi-command batches with full prevalidation and rollback, backed by one editor undo action.
 - Coordinate script-file writes with dirty editor buffers before exposing script-authoring tools.
-- Decide between the DAP-free breakpoint/stack/variables design and a supervised DAP session (see Debugger findings) and implement breakpoint control, stack, variables and stepping.
+- Add conditional breakpoints and nested value (array, dictionary, object) expansion to `debug.variables`.
 - Add bounded capture-cache retention and supervisor crash-recovery tooling without signalling stored PIDs.

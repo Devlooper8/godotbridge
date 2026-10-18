@@ -20,6 +20,61 @@ def status(json_output: bool = typer.Option(False, "--json")):
     perform("debug.status", json_output)
 
 
+@debug_app.command("breakpoints")
+def list_breakpoints(json_output: bool = typer.Option(False, "--json")):
+    """List breakpoints the next run will hit (bridge-set and script-editor ones)."""
+    perform("debug.breakpoints", json_output)
+
+
+@debug_app.command("set-breakpoints")
+def set_breakpoints(
+    path: str,
+    lines: list[int],
+    json_output: bool = typer.Option(False, "--json"),
+):
+    """Replace PATH's bridge breakpoints with the 1-based LINES (res:// .gd script)."""
+    perform("debug.set_breakpoints", json_output, path=path, lines=lines)
+
+
+@debug_app.command("clear-breakpoints")
+def clear_breakpoints(path: str | None = None, json_output: bool = typer.Option(False, "--json")):
+    """Remove the bridge breakpoints of one script, or all of them."""
+    perform("debug.clear_breakpoints", json_output, path=path)
+
+
+@debug_app.command()
+def stack(json_output: bool = typer.Option(False, "--json")):
+    """Script frames (file, line, function) of a game stopped at a breakpoint."""
+    perform("debug.stack", json_output)
+
+
+@debug_app.command()
+def variables(
+    frame: int = 0,
+    scope: str = "locals",
+    json_output: bool = typer.Option(False, "--json"),
+):
+    """Typed locals, members or globals of a stack frame of the stopped game."""
+    perform("debug.variables", json_output, frame=frame, scope=scope)
+
+
+@debug_app.command("continue")
+def continue_(json_output: bool = typer.Option(False, "--json")):
+    perform("debug.continue", json_output)
+
+
+@debug_app.command()
+def step(kind: str = "over", json_output: bool = typer.Option(False, "--json")):
+    """Step over, in or out. After pause use `step in`: a paused game has no frame to step over."""
+    perform("debug.step", json_output, kind=kind)
+
+
+@debug_app.command()
+def pause(json_output: bool = typer.Option(False, "--json")):
+    """Stop the running game at a frame boundary (no script frames until you step in)."""
+    perform("debug.pause", json_output)
+
+
 @app.command()
 def tree(
     path: str = ".",

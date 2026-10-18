@@ -71,6 +71,11 @@ advancing after an editor restart, compare `epoch` and restart from no `since`.
 the game did not answer within five seconds (frozen main thread or no autoload). Trees
 are limited to 5,000 nodes per request.
 
+**NOT_BREAKED / breakpoint not hit:** `debug stack/variables/step/continue` need a game
+stopped at a breakpoint (see `debug status`). Breakpoints go on executable lines of a
+`.gd` script (1-based) and apply to the next run; a game that already passed the line is
+unaffected. After `debug pause` there are no script frames: use `debug step --kind in`.
+
 **Tests:** run `python scripts/run_integration_tests.py --graphical`. Artifacts and
 editor logs stay in `.artifacts/`. Tests without `--engine` skip engine integration
 explicitly. This Windows environment emits a root-certificate-store error from

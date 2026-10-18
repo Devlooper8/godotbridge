@@ -4,6 +4,9 @@ extends RefCounted
 ## only, typed values through codec.gd. Changes are runtime-only and never saved.
 
 const Codec = preload("../codec.gd")
+const BRIDGE_DIR := "res://addons/godot_bridge/"
+const MAX_VARIABLES := 200
+const MAX_STRING := 2000
 const MAX_TREE_NODES := 5000 # 10,000 nodes overflowed the debugger channel in testing.
 
 static func failure(code: String, message: String) -> Dictionary:
@@ -91,3 +94,60 @@ static func handle(root: Node, command: String, params: Dictionary) -> Dictionar
 			node.set(key, value.value if info.is_empty() else Codec.coerce(info, value.value))
 			return success({"node_path": params.get("path", "."), "property": key, "value": Codec.encode(node.get(key))})
 	return failure("UNSUPPORTED_OPERATION", "Unknown runtime operation: " + command)
+
+## Script frames of the stopped game, innermost first. Called from a debugger message handler, so the bridge's
+## own handler frames sit on top of the stack; they are recognised by their script path and dropped.
+static func user_frames() -> Array:
+	var frames := []
+	for backtrace in Engine.capture_script_backtraces(true):
+		for index in backtrace.get_frame_count():
+			if not backtrace.get_frame_file(index).begins_with(BRIDGE_DIR):
+				frames.append({"backtrace": backtrace, "index": index})
+	return frames
+
+static func encode_value(value: Variant) -> Variant:
+	var encoded = Codec.encode(value)
+	if encoded is String and encoded.length() > MAX_STRING:
+		return {"type": "String", "truncated": true, "value": encoded.left(MAX_STRING)}
+	if encoded is Dictionary and encoded.get("supported", true) == false:
+		encoded.repr = str(value).left(MAX_STRING)
+	return encoded
+
+static func stack() -> Dictionary:
+	var frames := []
+	for entry in user_frames():
+		var backtrace: ScriptBacktrace = entry.backtrace
+		frames.append({"index": frames.size(), "file": backtrace.get_frame_file(entry.index),
+			"line": backtrace.get_frame_line(entry.index), "function": backtrace.get_frame_function(entry.index)})
+		if frames.size() >= 100:
+			break
+	return success({"frames": frames})
+
+static func variables(params: Dictionary) -> Dictionary:
+	var frames := user_frames()
+	var frame := int(params.get("frame", 0))
+	if frame < 0 or frame >= frames.size():
+		return failure("INVALID_ARGUMENT", "No such stack frame: %d (the stopped game has %d script frames)." % [frame, frames.size()])
+	var backtrace: ScriptBacktrace = frames[frame].backtrace
+	var index: int = frames[frame].index
+	var scope: String = params.get("scope", "locals")
+	var count := 0
+	match scope:
+		"locals":
+			count = backtrace.get_local_variable_count(index)
+		"members":
+			count = backtrace.get_member_variable_count(index)
+		"globals":
+			count = backtrace.get_global_variable_count()
+		_:
+			return failure("INVALID_ARGUMENT", "Scope must be locals, members or globals.")
+	var result := []
+	for variable in mini(count, MAX_VARIABLES):
+		match scope:
+			"locals":
+				result.append({"name": backtrace.get_local_variable_name(index, variable), "value": encode_value(backtrace.get_local_variable_value(index, variable))})
+			"members":
+				result.append({"name": backtrace.get_member_variable_name(index, variable), "value": encode_value(backtrace.get_member_variable_value(index, variable))})
+			_:
+				result.append({"name": backtrace.get_global_variable_name(variable), "value": encode_value(backtrace.get_global_variable_value(variable))})
+	return success({"frame": frame, "scope": scope, "variables": result, "truncated": count > MAX_VARIABLES})

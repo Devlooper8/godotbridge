@@ -67,6 +67,30 @@ breakpoint. With no editor-played game they fail with `GAME_NOT_RUNNING`. Requir
 the `GodotBridgeRuntime` autoload, which the plugin adds. If several instances are
 run at once, the first active session answers.
 
+## Editor-play debugging
+
+```text
+godotctl debug set-breakpoints res://scripts/player.gd 12 30
+godotctl debug breakpoints
+godotctl game run --mode editor --scene res://scenes/main.tscn
+godotctl debug status
+godotctl debug stack
+godotctl debug variables [--frame 0] [--scope locals|members|globals]
+godotctl debug step [--kind over|in|out]
+godotctl debug continue
+godotctl debug pause
+godotctl debug clear-breakpoints [res://scripts/player.gd]
+```
+
+Breakpoints are kept by the bridge, replace the script's previous bridge breakpoints
+and apply to the running game and every later run until cleared. `debug breakpoints`
+also lists breakpoints the script editor reported. `stack`, `variables`, `step` and
+`continue` need a game stopped at a breakpoint (`NOT_BREAKED` otherwise); `status` shows
+`breaked`. Values are typed as in [protocol](protocol.md); unsupported types carry a
+`repr`. `pause` stops between frames, so `stack` is empty until `step --kind in`.
+There is deliberately no expression evaluation. Execution control relies on engine
+internals that Godot does not document; the tests fail if an update breaks them.
+
 ## Scenes and nodes
 
 ```text

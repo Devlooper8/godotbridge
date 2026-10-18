@@ -131,6 +131,21 @@ Edits live only in the running game. `debug.status` returns `running`, `breaked`
 `sessions` and `dap_port` (the editor setting `network/debug_adapter/remote_port`)
 from the editor debugger sessions.
 
+## Debugging (editor play)
+
+`debug.set_breakpoints` (`path` res:// `.gd`, `lines` 1-based, replaces that script's
+bridge breakpoints), `debug.clear_breakpoints` (optional `path`) and `debug.breakpoints`
+(`bridge`, `editor`, `all`: path -> sorted lines) work with or without a running game;
+the registry is applied to every later run. While the game is stopped at a breakpoint,
+`debug.stack` returns `frames` (`index` 0 innermost, `file`, `line`, `function`) and
+`debug.variables` (`frame`, `scope` of `locals`/`members`/`globals`) returns `variables`
+(`name`, typed `value`; at most 200, `truncated`). Unsupported types are
+`{"type": ..., "supported": false, "repr": ...}`; long strings are marked `truncated`.
+`debug.continue`, `debug.step` (`kind` over/in/out) and `debug.pause` return `breaked`,
+`running` and `changed` once the game reacted (3 s). Stack, variables, step and continue
+on a game that is not stopped fail with `NOT_BREAKED`; with no game, `GAME_NOT_RUNNING`.
+Pause stops between frames, so the stack is empty until a `step` of kind `in`.
+
 ## Error code vocabulary
 
 EDITOR_DISCONNECTED, AUTHENTICATION_FAILED, PROTOCOL_MISMATCH, INVALID_ARGUMENT,
@@ -138,5 +153,5 @@ INVALID_NODE_PATH, NODE_NOT_FOUND, SCENE_NOT_FOUND, SCENE_NOT_OPEN,
 RESOURCE_NOT_FOUND, UNSUPPORTED_NODE_TYPE, UNSUPPORTED_PROPERTY,
 UNSUPPORTED_OPERATION, READ_ONLY_RESOURCE, FILE_ACCESS_DENIED, PROJECT_NOT_FOUND,
 GODOT_NOT_FOUND, TIMEOUT, EDITOR_BUSY, TRANSACTION_FAILED, CAPTURE_UNAVAILABLE,
-GAME_NOT_RUNNING, INTERNAL_ERROR. Some codes are reserved for future operations. Error details may
+GAME_NOT_RUNNING, NOT_BREAKED, INTERNAL_ERROR. Some codes are reserved for future operations. Error details may
 contain bounded worker diagnostics; credentials are never included.

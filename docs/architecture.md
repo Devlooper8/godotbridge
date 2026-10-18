@@ -138,15 +138,34 @@ at a breakpoint, and the autoload also loads (inertly) in the managed runtime.
 This is distinct from managed-runtime stdout capture, which reads the supervised
 process's pipes and needs no debugger.
 
-## Breakpoints, stack and variables (not implemented)
+## Breakpoints, stack, variables and stepping
 
-Godot's editor runs a Debug Adapter Protocol server (default `127.0.0.1:6006`).
-A stateless client (connect, request, disconnect per CLI call) was evaluated and is
-not reliable on 4.7.2: closing the connection leaves the game running and breakpoints
-set through `setBreakpoints` persist, but the server keeps global per-break state.
-After one client has called `scopes`/`variables`/`evaluate` (or stepped), a fresh
-connection's `stackTrace` returns no frames, and `stepOut`/`stepIn` can leave the
-connection unanswered. See PROGRESS.md for the details and the proposed alternative.
+Implemented without Godot's Debug Adapter Protocol (a stateless DAP client was
+unreliable on 4.7.2, see PROGRESS.md) over the same plugin/autoload channel.
+
+- **Breakpoints** live in a bridge registry in `debugger_plugin.gd` (path -> lines),
+  because `EditorDebuggerSession.set_breakpoint` alone is lost between runs and does
+  nothing without an active session. The registry is applied when the session starts
+  and changes are forwarded to a live session. `debug.breakpoints` lists the registry
+  plus breakpoints the script editor reports through `_breakpoint_set_in_tree`
+  (those set before the plugin loaded are not visible to it; bridge-set ones do not
+  trigger that callback).
+- **Stack and variables** are read by the game: while it is stopped its debug loop still
+  services the `godotbridge` capture, whose handler calls
+  `Engine.capture_script_backtraces(true)`. The handler's own frames sit on top and are
+  dropped by script path (`res://addons/godot_bridge/`), not by position. Values go
+  through `codec.gd` (unsupported types are marked `supported: false` with a bounded
+  `repr`); at most 200 variables per scope and 2,000 characters per string.
+- **Execution control** sends Godot's internal debugger commands with
+  `EditorDebuggerSession.send_message`. They are not a documented API; they are confined
+  to the `ENGINE_COMMANDS` table in `debugger_plugin.gd`, and `test_debug_control.py`
+  fails if an engine update renames one. The plugin waits for the session's `breaked` or
+  `continued` signal so the response reports the new state. `pause` breaks between
+  frames, outside any script, so `debug.stack` is empty until a `step` of kind `in`; it
+  first waits for the game's autoload to answer, because breaking during game startup
+  crashed the editor in testing. The autoload runs last each frame so that step lands
+  in game code.
+- There is no `evaluate`: arbitrary expression execution is deliberately not exposed.
 
 ## Version-matched references
 

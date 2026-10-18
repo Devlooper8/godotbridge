@@ -1307,5 +1307,120 @@
     ],
     "title": "RuntimeSetProperty",
     "type": "object"
+  },
+  "debug.breakpoints": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "Empty",
+    "type": "object"
+  },
+  "debug.set_breakpoints": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "description": "Project-relative res:// path to a .gd script",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      },
+      "lines": {
+        "description": "1-based lines that replace this script's bridge breakpoints; [] clears them",
+        "items": {
+          "maximum": 1000000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "maxItems": 100,
+        "title": "Lines",
+        "type": "array"
+      }
+    },
+    "required": [
+      "path",
+      "lines"
+    ],
+    "title": "SetBreakpoints",
+    "type": "object"
+  },
+  "debug.clear_breakpoints": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "anyOf": [
+          {
+            "maxLength": 1024,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Only this script; omit to clear all",
+        "title": "Path"
+      }
+    },
+    "title": "ClearBreakpoints",
+    "type": "object"
+  },
+  "debug.stack": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "Empty",
+    "type": "object"
+  },
+  "debug.variables": {
+    "additionalProperties": false,
+    "properties": {
+      "frame": {
+        "default": 0,
+        "description": "Stack frame index; 0 is innermost",
+        "maximum": 99,
+        "minimum": 0,
+        "title": "Frame",
+        "type": "integer"
+      },
+      "scope": {
+        "default": "locals",
+        "enum": [
+          "locals",
+          "members",
+          "globals"
+        ],
+        "title": "Scope",
+        "type": "string"
+      }
+    },
+    "title": "DebugVariables",
+    "type": "object"
+  },
+  "debug.continue": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "Empty",
+    "type": "object"
+  },
+  "debug.step": {
+    "additionalProperties": false,
+    "properties": {
+      "kind": {
+        "default": "over",
+        "enum": [
+          "over",
+          "in",
+          "out"
+        ],
+        "title": "Kind",
+        "type": "string"
+      }
+    },
+    "title": "DebugStep",
+    "type": "object"
+  },
+  "debug.pause": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "Empty",
+    "type": "object"
   }
 }

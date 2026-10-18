@@ -46,7 +46,7 @@ is **unauthenticated**: any local process of any user can connect, set breakpoin
 read variables, evaluate expressions in a stopped game (verified: `evaluate` runs
 GDScript expressions) and control execution. It binds loopback only (checked with
 `netstat` on Windows) and is enabled by default in graphical and headless editors.
-GodotBridge neither uses nor exposes it and adds no new listener; the bridge's own
+GodotBridge neither uses nor exposes it, offers no `evaluate`, and adds no new listener; the bridge's own
 runtime inspection goes through the authenticated bridge connection and Godot's
 editor-to-game debugger channel. If this matters for your threat model, change or
 firewall that port in the editor settings; this project cannot restrict it. A second
@@ -56,6 +56,11 @@ editor owns the port.
 The `runtime.*` operations read and change live nodes of the played game, bounded by
 the same property allowlist and type checks as `node.*`; they cannot call methods,
 evaluate expressions or reach arbitrary properties, and nothing is saved.
+
+The `debug.*` operations set breakpoints in project `.gd` scripts, stop and resume the
+editor-played game, and read its stack and variables (bounded, encoded values only).
+They cannot run code or evaluate expressions. An authenticated agent can still pause the
+game and read its variables, like the human debugger.
 
 ## Practical boundaries
 

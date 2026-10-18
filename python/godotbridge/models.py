@@ -209,6 +209,29 @@ class RuntimeSetProperty(Property):
     value: JsonValue
 
 
+class SetBreakpoints(Arguments):
+    path: str = Field(max_length=1024, description="Project-relative res:// path to a .gd script")
+    lines: list[Annotated[int, Field(ge=1, le=1_000_000)]] = Field(
+        max_length=100,
+        description="1-based lines that replace this script's bridge breakpoints; [] clears them",
+    )
+
+
+class ClearBreakpoints(Arguments):
+    path: str | None = Field(
+        default=None, max_length=1024, description="Only this script; omit to clear all"
+    )
+
+
+class DebugVariables(Arguments):
+    frame: int = Field(default=0, ge=0, le=99, description="Stack frame index; 0 is innermost")
+    scope: Literal["locals", "members", "globals"] = "locals"
+
+
+class DebugStep(Arguments):
+    kind: Literal["over", "in", "out"] = "over"
+
+
 class GameCapture(Arguments):
     output: str = "game.png"
 
@@ -369,6 +392,32 @@ OPERATIONS: dict[str, Operation] = {
         RuntimeSetProperty,
         "Set an allowlisted property or exported script variable on a live node. Runtime only: never saved to the scene.",
         True,
+    ),
+    "debug.breakpoints": Operation(
+        Empty,
+        "List breakpoints that will be hit: those set through the bridge and those the script editor reported.",
+    ),
+    "debug.set_breakpoints": Operation(
+        SetBreakpoints,
+        "Replace a script's bridge breakpoints (1-based lines). They apply to the running game and to later runs.",
+        True,
+    ),
+    "debug.clear_breakpoints": Operation(
+        ClearBreakpoints, "Remove bridge breakpoints for one script or all of them.", True
+    ),
+    "debug.stack": Operation(
+        Empty, "Read the script stack (file, line, function) of a game stopped at a breakpoint."
+    ),
+    "debug.variables": Operation(
+        DebugVariables,
+        "Read bounded, typed locals, members or globals of a stack frame of the stopped game.",
+    ),
+    "debug.continue": Operation(Empty, "Resume a game stopped at a breakpoint.", True),
+    "debug.step": Operation(
+        DebugStep, "Step over, in or out from a game stopped at a breakpoint.", True
+    ),
+    "debug.pause": Operation(
+        Empty, "Stop the running editor-played game at its next script line.", True
     ),
     "game.screenshot": Operation(
         GameCapture,
