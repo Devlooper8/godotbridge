@@ -131,3 +131,32 @@ def test_plain_and_instance_scenes_are_not_inherited(editor, request):
     assert editor.call("node.inspect", path="Inst")["inherited"] is False
     editor.call("node.rename", path="Inst", name="Renamed")
     rejected(editor, "node.rename", "INVALID_ARGUMENT", path=".", name="Other")
+
+
+def test_new_unsaved_inherited_scene_is_detected(editor):
+    write(editor, "scenes/inh_base.tscn", BASE)
+    opened = editor.call("scene.open", path="res://scenes/inh_base.tscn", inherited=True)
+    assert opened["scene_path"] == ""
+    assert editor.call("node.inspect", path="Arm")["inherited"] is True
+    rejected(editor, "node.delete", "READ_ONLY_RESOURCE", path="Arm/Hand")
+    rejected(editor, "node.rename", "READ_ONLY_RESOURCE", path="Arm", name="Other")
+    editor.call("node.set_property", path="Arm", property="visible", value=False)
+    editor.call("node.create", parent="Arm", name="Added")
+    editor.call("node.delete", path="Arm/Added")
+    editor.call("scene.save_as", path="res://scenes/new_inherited.tscn")
+    rejected(editor, "node.delete", "READ_ONLY_RESOURCE", path="Arm")
+    text = read(editor, "scenes/new_inherited.tscn")
+    assert "instance=ExtResource" in text and 'name="Arm" type=' not in text
+
+
+def test_base_change_between_open_and_first_call_is_detected(editor, request):
+    derive(editor, request)
+    base = editor.config.project / "scenes/inh_base.tscn"
+    base.write_text(
+        base.read_text(encoding="utf-8")
+        + "# changed after open\n[node name=Late type=Node3D parent=.]\n",
+        encoding="utf-8",
+    )
+    editor.call("node.create", name="Local")
+    rejected(editor, "node.delete", "READ_ONLY_RESOURCE", path="Local")
+    write(editor, "scenes/inh_base.tscn", BASE)

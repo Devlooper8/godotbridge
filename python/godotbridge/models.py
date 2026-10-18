@@ -40,6 +40,13 @@ class ScenePath(Arguments):
     path: str = Field(description="Project-relative res:// path to a .tscn scene", max_length=1024)
 
 
+class SceneOpen(ScenePath):
+    inherited: bool = Field(
+        default=False,
+        description="Open the scene as the base of a new, unsaved inherited scene (save it with scene.save_as)",
+    )
+
+
 class SceneCreate(ScenePath):
     root: NodeType = "Node3D"
 
@@ -225,7 +232,9 @@ OPERATIONS: dict[str, Operation] = {
     "scene.current": Operation(Empty, "Read the current scene identity."),
     "scene.close": Operation(Empty, "Close a saved scene; refuse unsaved changes.", True),
     "scene.tree": Operation(Empty, "Inspect hierarchy, transforms, selection and 3D resources."),
-    "scene.open": Operation(ScenePath, "Open a project scene in the editor.", True),
+    "scene.open": Operation(
+        SceneOpen, "Open a project scene, or start a new inherited scene from it.", True
+    ),
     "scene.create": Operation(
         SceneCreate, "Create a new scene file without overwriting and open it.", True
     ),

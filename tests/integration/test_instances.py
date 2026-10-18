@@ -29,6 +29,15 @@ OUTER = """[gd_scene load_steps=2 format=3]
 
 [node name="Inner" parent="." instance=ExtResource("1")]
 """
+TOOL_CHILD_UNIT = """[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/tooled_unit.gd" id="1"]
+
+[node name="Plain" type="Node3D"]
+
+[node name="Tooled" type="Node3D" parent="."]
+script = ExtResource("1")
+"""
 INNER = """[gd_scene format=3]
 
 [node name="Inner" type="Node3D"]
@@ -232,3 +241,105 @@ def test_cli_and_mcp_expose_instancing(host):
     assert not godotctl("node", "editable-children", "Cli", "--disable")["instance"][
         "editable_children"
     ]
+
+
+def test_added_children_survive_structure_undo_redo(host, request):
+    spawn(host)
+    host.call("node.create", parent="Hero", name="Extra")
+    host.call("node.set_editable_children", path="Hero", editable=True)
+    host.call("node.create", parent="Hero/Body", name="Deep")
+    host.call("node.create", name="Group")
+    for _ in range(2):
+        host.call("node.delete", path="Hero")
+        host.call("editor.undo")
+        host.call("editor.redo")
+        host.call("editor.undo")
+    host.call("node.reparent", path="Hero", parent="Group")
+    host.call("editor.undo")
+    host.call("editor.redo")
+    host.call("editor.undo")
+    host.call("node.reparent", path="Hero", parent="Group")
+    host.call("node.reparent", path="Group/Hero", parent=".")
+    host.call("editor.undo")
+    host.call("editor.undo")
+    # Undoing and redoing creation of a child below an instance keeps it owned too.
+    host.call("node.create", parent="Hero", name="Late")
+    host.call("editor.undo")
+    host.call("editor.redo")
+    text = saved(host, request)
+    assert '[node name="Extra" type="Node3D" parent="Hero"' in text
+    assert '[node name="Deep" type="Node3D" parent="Hero/Body"' in text
+    assert '[node name="Late" type="Node3D" parent="Hero"' in text
+    assert 'name="Gun"' not in text
+    reload(host, request)
+    host.call("node.inspect", path="Hero/Extra")
+    host.call("node.inspect", path="Hero/Body/Deep")
+
+
+def test_duplicate_refuses_instances_with_overrides(host):
+    spawn(host)
+    host.call("node.duplicate", path="Hero", name="Plain")
+    host.call("node.create", parent="Hero", name="Extra")
+    rejected(host, "node.duplicate", "UNSUPPORTED_OPERATION", path="Hero")
+    host.call("node.create", name="Group")
+    host.call("node.reparent", path="Plain", parent="Group")
+    host.call("node.duplicate", path="Group", name="GroupCopy")
+    host.call("node.set_editable_children", path="Group/Plain", editable=True)
+    rejected(host, "node.duplicate", "UNSUPPORTED_OPERATION", path="Group", name="G2")
+
+
+def test_tool_scripts_inside_instances_block_subtree_operations(host):
+    write(host, "scenes/tool_child_unit.tscn", TOOL_CHILD_UNIT)
+    host.call(
+        "node.instantiate",
+        scene="res://scenes/tool_child_unit.tscn",
+        name="Tooled",
+        allow_tool_script=True,
+    )
+    host.call("node.create", name="Group")
+    host.call("node.reparent", path="Tooled", parent="Group", allow_tool_script=True)
+    for method, params in [
+        ("node.delete", {"path": "Group"}),
+        ("node.duplicate", {"path": "Group"}),
+        ("node.reparent", {"path": "Group", "parent": "."}),
+    ]:
+        rejected(host, method, "READ_ONLY_RESOURCE", **params)
+    host.call("node.delete", path="Group", allow_tool_script=True)
+
+
+DERIVED_TOOL_SCRIPT = """extends "res://scripts/tooled_unit.gd"
+"""
+PRELOADING_SCRIPT = """extends Node3D
+const Base = preload("res://scripts/tooled_unit.gd")
+"""
+
+
+@pytest.mark.parametrize(
+    "source", [DERIVED_TOOL_SCRIPT, PRELOADING_SCRIPT], ids=["extends", "preload"]
+)
+def test_tool_script_reached_through_another_script(host, source):
+    write(host, "scripts/indirect.gd", source)
+    write(
+        host,
+        "scenes/indirect.tscn",
+        '[gd_scene load_steps=2 format=3]\n\n[ext_resource type="Script" path="res://scripts/indirect.gd" id="1"]\n\n'
+        '[node name="Indirect" type="Node3D"]\nscript = ExtResource("1")\n',
+    )
+    rejected(host, "node.instantiate", "READ_ONLY_RESOURCE", scene="res://scenes/indirect.tscn")
+    host.call("node.instantiate", scene="res://scenes/indirect.tscn", allow_tool_script=True)
+
+
+def test_dependency_cap_fails_closed(host):
+    lines = ['[gd_scene format=3]\n\n[node name="Heavy" type="Node3D"]\n']
+    for index in range(520):
+        write(
+            host,
+            f"scenes/many/r{index}.tres",
+            '[gd_resource type="Resource" format=3]\n\n[resource]\n',
+        )
+    header = "".join(
+        f'[ext_resource type="Resource" path="res://scenes/many/r{index}.tres" id="{index}"]\n'
+        for index in range(520)
+    )
+    write(host, "scenes/heavy.tscn", "[gd_scene load_steps=2 format=3]\n\n" + header + lines[0])
+    rejected(host, "node.instantiate", "INVALID_ARGUMENT", scene="res://scenes/heavy.tscn")

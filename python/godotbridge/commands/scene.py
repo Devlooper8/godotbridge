@@ -23,8 +23,12 @@ def tree(json_output: bool = typer.Option(False, "--json")):
 
 
 @app.command("open")
-def open_scene(path: str, json_output: bool = typer.Option(False, "--json")):
-    perform("scene.open", json_output, path=path)
+def open_scene(
+    path: str,
+    inherited: bool = typer.Option(False, help="Start a new unsaved inherited scene from PATH."),
+    json_output: bool = typer.Option(False, "--json"),
+):
+    perform("scene.open", json_output, path=path, inherited=inherited)
 
 
 @app.command()

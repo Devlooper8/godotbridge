@@ -46,12 +46,55 @@ func editable(node: Node, mode: String = "edit", subtree: bool = false) -> bool:
 	if is_tool_script(node) and not allow_tool:
 		error = Wire.failure("READ_ONLY_RESOURCE", "Node has a @tool script that runs inside the editor; pass allow_tool_script to mutate it anyway.")
 		return false
-	if subtree:
-		# Instance internals (owned by the instance) are not part of this scene's subtree.
-		for child in node.get_children():
-			if child.owner == root and not editable(child, "edit", true):
+	if subtree and not allow_tool:
+		# Removing or re-instantiating a subtree runs _exit_tree and _enter_tree/_ready of every @tool script in
+		# it, including those inside scene instances, so the scan ignores ownership.
+		for descendant in descendants(node):
+			if is_tool_script(descendant):
+				error = Wire.failure("READ_ONLY_RESOURCE", "The subtree contains a @tool script ('%s') that runs inside the editor; pass allow_tool_script to mutate it anyway." % root.get_path_to(descendant))
 				return false
 	return true
+
+static func descendants(node: Node) -> Array[Node]:
+	var out: Array[Node] = []
+	var pending: Array[Node] = node.get_children()
+	while not pending.is_empty():
+		var current: Node = pending.pop_back()
+		out.append(current)
+		pending.append_array(current.get_children())
+	return out
+
+## Nodes of this subtree (including node) whose owner is the edited root, wherever they sit: that is exactly
+## what Node.remove_child un-owns and what must be restored on re-attach.
+func owned_nodes(node: Node) -> Array[Node]:
+	var out: Array[Node] = []
+	if node.owner == root:
+		out.append(node)
+	for descendant in descendants(node):
+		if descendant.owner == root:
+			out.append(descendant)
+	return out
+
+## Ownership of a new, never-attached subtree: unowned nodes belong to the scene, except below an instance root
+## (whose unowned children are ambiguous). Anything owned by a scene instance stays out of this scene's file.
+func fresh_nodes(node: Node) -> Array[Node]:
+	var out: Array[Node] = [node]
+	var instance := not node.scene_file_path.is_empty()
+	for child in node.get_children():
+		if child.owner == root or (child.owner == null and not instance):
+			out.append_array(fresh_nodes(child))
+	return out
+
+## Duplication re-instantiates instances, which loses overrides and added children below them.
+func has_instance_overrides(node: Node) -> bool:
+	for candidate in [node] + descendants(node):
+		if candidate != root and candidate.owner == root and not candidate.scene_file_path.is_empty():
+			if root.is_editable_instance(candidate):
+				return true
+			for below in descendants(candidate):
+				if below.owner == root:
+					return true
+	return false
 
 ## Inherited-scene support. The editor keeps no public record of which nodes came from the base scene
 ## (Node.get_scene_inherited_state() is not exposed to scripts), so the edited scene's saved file is the
@@ -62,6 +105,18 @@ func editable(node: Node, mode: String = "edit", subtree: bool = false) -> bool:
 ## if the base chain changed on disk since first use (the open tree can no longer be matched to it), or
 ## the file cannot be loaded, every node is treated as inherited. Unsaved scenes have no file and are
 ## treated as not inherited.
+## Called when the editor switches or opens a scene: fixes the base-scene baseline at open time and drops
+## cache entries of closed scenes.
+func track(scene_root: Node) -> void:
+	for id in base_cache.keys():
+		if not is_instance_id_valid(id):
+			base_cache.erase(id)
+	if scene_root:
+		var previous := root
+		root = scene_root
+		base_info()
+		root = previous
+
 func is_inherited(node: Node) -> bool:
 	var info := base_info()
 	if not info.get("inherited", false):
@@ -82,11 +137,21 @@ func base_info() -> Dictionary:
 
 func _base_info(id: int) -> Dictionary:
 	var path := root.scene_file_path
-	if path.is_empty():
-		return {}
-	var key := fingerprint(path)
 	var entry: Dictionary = base_cache.get(id, {})
-	if entry.is_empty() or entry.key != key:
+	if path.is_empty():
+		# An unsaved "New Inherited Scene" has no file, but packing the live root records the base chain the
+		# editor loaded it with (the same data the editor saves), which is also exactly the open tree's base.
+		if entry.is_empty():
+			var packed := PackedScene.new()
+			if packed.pack(root) == OK:
+				entry = _from_state(packed.get_state())
+			else:
+				entry = {"inherited": true, "unknown": true, "files": {}, "reason": "The unsaved scene could not be packed to find its base scene."}
+			entry.unsaved = true
+			base_cache[id] = entry
+		return entry
+	var key := fingerprint(path)
+	if entry.is_empty() or entry.get("key") != key:
 		var fresh := _read_base(path)
 		fresh.key = key
 		# The first-seen base fingerprints stand for the tree the editor loaded; later differences mean it is outdated.
@@ -94,7 +159,7 @@ func _base_info(id: int) -> Dictionary:
 		fresh.stale = entry.get("stale", false) or (entry.has("first_files") and fresh.get("files", {}).keys() != entry.first_files.keys())
 		entry = fresh
 		base_cache[id] = entry
-	if entry.get("inherited", false) and not entry.stale:
+	if entry.get("inherited", false) and not entry.get("stale", false):
 		for file in entry.first_files:
 			if fingerprint(file) != entry.first_files[file]:
 				entry.stale = true
@@ -107,7 +172,9 @@ func _read_base(path: String) -> Dictionary:
 	var scene = ResourceLoader.load(path, "PackedScene", ResourceLoader.CACHE_MODE_IGNORE)
 	if not scene is PackedScene:
 		return {"inherited": true, "unknown": true, "files": {}, "reason": "The scene file could not be loaded to find its base scene."}
-	var state: SceneState = scene.get_state()
+	return _from_state(scene.get_state())
+
+func _from_state(state: SceneState) -> Dictionary:
 	if state.get_base_scene_state() == null:
 		return {"inherited": false}
 	var paths := {}
@@ -262,7 +329,7 @@ func handle(method: String, params: Dictionary) -> Dictionary:
 				return Wire.failure("INVALID_ARGUMENT", "Cannot delete the scene root.")
 			undo.create_action("GodotBridge: delete " + String(node.name), 0, root)
 			undo.add_do_method(node.get_parent(), "remove_child", node)
-			undo.add_undo_method(self, "_attach", node.get_parent(), node, root, node.get_index())
+			undo.add_undo_method(self, "_attach", node.get_parent(), node, root, node.get_index(), owned_nodes(node))
 			undo.add_undo_reference(node)
 			undo.commit_action()
 			return success({"deleted": params.get("path", ".")})
@@ -272,6 +339,8 @@ func handle(method: String, params: Dictionary) -> Dictionary:
 			var node_name: String = params.get("name") if params.get("name") != null else String(node.name) + "Copy"
 			if not valid_name(node.get_parent(), node_name):
 				return error
+			if has_instance_overrides(node):
+				return Wire.failure("UNSUPPORTED_OPERATION", "Duplicating would drop the editable-children flag or children added below a scene instance; duplicate the instance without them or re-create it with node.instantiate.")
 			# Keep scripts (placeholder-safe unless allow_tool_script), persistent signals, groups and instancing.
 			var copy := node.duplicate(Node.DUPLICATE_SIGNALS | Node.DUPLICATE_GROUPS | Node.DUPLICATE_SCRIPTS | Node.DUPLICATE_USE_INSTANTIATION)
 			copy.name = node_name
@@ -320,8 +389,9 @@ func handle(method: String, params: Dictionary) -> Dictionary:
 			if not new_transform.is_finite():
 				return Wire.failure("INVALID_ARGUMENT", "Reparent transform exceeds the engine's numeric range.")
 			undo.create_action("GodotBridge: reparent", 0, root)
-			undo.add_do_method(self, "_move", node, parent, root, parent.get_child_count(), new_transform)
-			undo.add_undo_method(self, "_move", node, node.get_parent(), root, node.get_index(), old_transform)
+			var owned := owned_nodes(node)
+			undo.add_do_method(self, "_move", node, parent, root, parent.get_child_count(), new_transform, owned)
+			undo.add_undo_method(self, "_move", node, node.get_parent(), root, node.get_index(), old_transform, owned)
 			undo.commit_action()
 			return success(describe(node))
 	return Wire.failure("UNSUPPORTED_OPERATION", "Unknown node operation.")
@@ -335,15 +405,20 @@ func instantiate(params: Dictionary) -> Dictionary:
 		return Wire.failure("FILE_ACCESS_DENIED", "Use a res:// .tscn path without traversal or symlinks.")
 	if not FileAccess.file_exists(path):
 		return Wire.failure("SCENE_NOT_FOUND", "Scene file does not exist: " + path)
-	var closure := dependency_closure(path)
+	var found := dependency_closure(path)
+	var closure: Array = found.files
+	if not found.complete:
+		return Wire.failure("INVALID_ARGUMENT", "The scene has too many dependencies to verify for recursion and @tool scripts.")
 	if path == root.scene_file_path or root.scene_file_path in closure:
 		return Wire.failure("INVALID_ARGUMENT", "A scene cannot be instanced into itself, directly or through another scene.")
 	if not allow_tool:
 		for dependency in closure:
 			if dependency.get_extension() in ["gd", "cs"]:
 				var script = ResourceLoader.load(dependency)
-				if script is Script and script.is_tool():
-					return Wire.failure("READ_ONLY_RESOURCE", "The scene uses a @tool script that would run in the editor; pass allow_tool_script to instance it anyway.")
+				while script is Script:
+					if script.is_tool():
+						return Wire.failure("READ_ONLY_RESOURCE", "The scene uses a @tool script that would run in the editor; pass allow_tool_script to instance it anyway.")
+					script = script.get_base_script()
 	var packed = ResourceLoader.load(path, "PackedScene")
 	if not packed is PackedScene or not packed.can_instantiate():
 		return Wire.failure("SCENE_NOT_FOUND", "File is not an instantiable PackedScene.")
@@ -363,28 +438,46 @@ func instantiate(params: Dictionary) -> Dictionary:
 			index += 1
 	return add_node(parent, node)
 
-## Every res:// file reachable through ResourceLoader dependencies, including the start path.
-static func dependency_closure(start: String) -> Array:
+## Every res:// file reachable from start through ResourceLoader dependencies and, for scripts, their base-script
+## chain and quoted res:// paths in the source (preload/load targets). "complete" is false when the 512-file
+## cap was hit; callers must then fail closed.
+static func dependency_closure(start: String) -> Dictionary:
 	var seen := {start: true}
 	var pending := [start]
-	while not pending.is_empty() and seen.size() < 512:
+	var regex := RegEx.create_from_string("[\"'](res://[^\"']+)[\"']")
+	while not pending.is_empty():
+		if seen.size() >= 512:
+			return {"files": seen.keys(), "complete": false}
 		var current: String = pending.pop_back()
-		if not current.get_extension() in ["tscn", "scn", "tres", "res"]:
-			continue
-		for entry in ResourceLoader.get_dependencies(current):
-			var parts: PackedStringArray = entry.split("::")
-			var dependency: String = parts[parts.size() - 1]
-			if (dependency.is_empty() or dependency.begins_with("uid://")) and parts[0].begins_with("uid://"):
-				var id := ResourceUID.text_to_id(parts[0])
-				dependency = ResourceUID.get_id_path(id) if ResourceUID.has_id(id) else ""
-			if not dependency.is_empty() and not seen.has(dependency):
+		var found: Array[String] = []
+		var extension := current.get_extension()
+		if extension in ["tscn", "scn", "tres", "res"]:
+			for entry in ResourceLoader.get_dependencies(current):
+				var parts: PackedStringArray = entry.split("::")
+				var dependency: String = parts[parts.size() - 1]
+				# A uid survives moves, so it wins when the recorded path no longer exists.
+				if parts[0].begins_with("uid://") and (dependency.is_empty() or not FileAccess.file_exists(dependency)):
+					var id := ResourceUID.text_to_id(parts[0])
+					dependency = ResourceUID.get_id_path(id) if ResourceUID.has_id(id) else dependency
+				if not dependency.is_empty():
+					found.append(dependency)
+		elif extension == "gd" and FileAccess.file_exists(current):
+			for match in regex.search_all(FileAccess.get_file_as_string(current)):
+				found.append(match.get_string(1))
+			var script = ResourceLoader.load(current)
+			var base = script.get_base_script() if script is Script else null
+			while base != null and not base.resource_path.is_empty():
+				found.append(base.resource_path)
+				base = base.get_base_script()
+		for dependency in found:
+			if not seen.has(dependency):
 				seen[dependency] = true
 				pending.append(dependency)
-	return seen.keys()
+	return {"files": seen.keys(), "complete": true}
 
 func add_node(parent: Node, node: Node) -> Dictionary:
 	undo.create_action("GodotBridge: create " + String(node.name), 0, root)
-	undo.add_do_method(self, "_attach", parent, node, root, -1)
+	undo.add_do_method(self, "_attach", parent, node, root, -1, fresh_nodes(node))
 	undo.add_undo_method(parent, "remove_child", node)
 	undo.add_do_reference(node)
 	undo.commit_action()
@@ -424,24 +517,17 @@ func set_transform(node: Node, params: Dictionary) -> Dictionary:
 		return Wire.failure("INVALID_ARGUMENT", "Transform exceeds the engine's finite numeric range.")
 	return set_properties(node, {"transform": updated})
 
-func _attach(parent: Node, node: Node, scene_root: Node, index: int) -> void:
+func _attach(parent: Node, node: Node, scene_root: Node, index: int, owned: Array) -> void:
 	parent.add_child(node)
-	_own(node, scene_root)
+	# remove_child cleared the owner of every node owned from outside the removed branch; restore exactly those.
+	for member in owned:
+		member.owner = scene_root
 	if index >= 0:
 		parent.move_child(node, mini(index, parent.get_child_count() - 1))
 
-## Adopts a new or re-attached subtree. Nodes owned by something else are a scene instance's internals and
-## must stay out of this scene's file; children of an instance root count as new only if owned by the root.
-func _own(node: Node, scene_root: Node) -> void:
-	node.owner = scene_root
-	var instance := not node.scene_file_path.is_empty()
-	for child in node.get_children():
-		if child.owner == scene_root or (child.owner == null and not instance):
-			_own(child, scene_root)
-
-func _move(node: Node, parent: Node, scene_root: Node, index: int, transform: Transform3D) -> void:
+func _move(node: Node, parent: Node, scene_root: Node, index: int, transform: Transform3D, owned: Array) -> void:
 	node.get_parent().remove_child(node)
-	_attach(parent, node, scene_root, index)
+	_attach(parent, node, scene_root, index, owned)
 	if node is Node3D:
 		node.transform = transform
 

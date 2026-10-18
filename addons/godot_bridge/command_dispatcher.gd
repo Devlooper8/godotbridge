@@ -17,6 +17,7 @@ func _init(owner_plugin: EditorPlugin) -> void:
 	plugin = owner_plugin
 	scenes = Scenes.new(plugin)
 	nodes = Nodes.new(plugin.get_undo_redo())
+	plugin.scene_changed.connect(nodes.track)
 	visual = Visual.new(plugin)
 	var data = JSON.parse_string(FileAccess.get_file_as_string("res://addons/godot_bridge/schemas.json"))
 	schemas = data if data is Dictionary else {}

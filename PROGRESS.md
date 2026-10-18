@@ -38,6 +38,7 @@
 - Final headless suite: `python scripts/run_integration_tests.py` — **56 passed, 1 intentionally skipped** (graphical editor play).
 - Final graphical suite: `python scripts/run_integration_tests.py --graphical` — **57 passed**.
 - Scene-mutation milestones (scripted nodes, instances, inherited scenes; 16 new integration tests): headless **72 passed, 1 skipped**; graphical **73 passed** (one unrelated managed-game test failed once on the first run and passed on rerun and in isolation).
+- Scene-mutation fixes (ownership restore, dependency scan, integer exports, unsaved inherited scenes; 9 more integration tests): headless **85 passed, 5 skipped** (graphical-only), graphical **90 passed**.
 - Unit-only: `python -m pytest tests/unit -q` — **13 passed**.
 - Debugger milestones (editor-play logs, runtime inspection; no breakpoint control): headless `python scripts/run_integration_tests.py` — **76 passed, 5 skipped** (editor-play tests need a display); graphical `--graphical` — **81 passed**; unit **13 passed**; Ruff lint and format clean. The editor logs contain no GDScript script or parse errors.
 - Installed-wheel graphical verification: `python -m pytest -o pythonpath=.artifacts/wheel-final tests/integration/test_connection.py tests/integration/test_mcp.py tests/integration/test_three_d.py --engine --graphical --basetemp .artifacts/pytest-wheel-final -q` — **10 passed**. This exercised the installed package's bundled addon against the real engine.
@@ -51,7 +52,7 @@
 
 - 0.1.0 is a release candidate; Linux/macOS and Python 3.11 CI have not run here.
 - Mutation rules follow the editor: `@tool`-script nodes need `allow_tool_script`; instance internals need editable children and nested-instance internals stay read-only; inherited nodes take overrides only.
-- Inherited detection reads the saved scene file (`get_scene_inherited_state()` is not exposed to GDScript): unsaved inherited scenes look non-inherited, and if a base file changes after first use every node is treated as inherited until the scene is reopened.
+- Inherited detection reads the saved scene file (`get_scene_inherited_state()` is not exposed to GDScript): if a base file changes after the scene was opened every node is treated as inherited until the scene is reopened.
 - Script variables are type-checked, not range/enum-checked; only scalar, vector, color, NodePath and simple-resource values are encodable. No cross-command atomic transaction API.
 - Preview omits animation, particles, skinning, gameplay and WorldEnvironment.
 - Editor camera is readable; framing uses the separate preview camera. Focus selects/switches workspace without moving the camera.

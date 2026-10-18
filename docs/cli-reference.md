@@ -79,6 +79,7 @@ godotctl scene save
 godotctl scene save-as res://scenes/copy.tscn
 godotctl scene close
 godotctl node add --type Node3D --name Object --parent .
+godotctl scene open res://scenes/base.tscn --inherited   # new unsaved inherited scene
 godotctl node instantiate res://scenes/unit.tscn [--parent .] [--name Hero]
 godotctl node editable-children Hero [--disable]
 godotctl node remove Object

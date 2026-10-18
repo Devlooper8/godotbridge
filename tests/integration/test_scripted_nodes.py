@@ -10,6 +10,9 @@ PLAIN = """extends Node3D
 @export var tint: Color = Color.WHITE
 @export var texture: Texture2D
 @export var anything: Variant = null
+@export_range(0, 10) var level: int = 1
+@export_enum("Low", "High:5") var mode: int = 0
+@export_enum("x", "y") var tag: String = "x"
 var hidden := 1
 """
 TOOL = """@tool
@@ -165,3 +168,23 @@ def test_duplicate_keeps_script_and_groups(scripted):
     assert 'groups=["enemies"]' in block.splitlines()[0]
     assert "script = ExtResource" in block
     assert "health = 11" in block
+
+
+def test_integer_exports_stay_integers_and_honor_hints(scripted):
+    scripted.call("node.set_property", path="Plain", property="health", value=9)
+    scripted.call("node.set_property", path="Plain", property="level", value=10)
+    scripted.call("node.set_property", path="Plain", property="mode", value=5)
+    scripted.call("node.set_property", path="Plain", property="tag", value="y")
+    for property, bad in [("level", 11), ("level", -1), ("mode", 2), ("tag", "z"), ("health", 2.5)]:
+        rejected(
+            scripted,
+            "node.set_property",
+            "INVALID_ARGUMENT",
+            path="Plain",
+            property=property,
+            value=bad,
+        )
+    scripted.call("scene.save")
+    text = read(scripted, "scenes/test_integer_exports_stay_integers_and_honor_hints.tscn")
+    assert "health = 9" in text and "health = 9.0" not in text
+    assert "level = 10" in text and "mode = 5" in text and 'tag = "y"' in text

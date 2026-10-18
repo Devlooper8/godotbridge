@@ -63,11 +63,16 @@ func handle(method: String, params: Dictionary) -> Dictionary:
 		var packed = ResourceLoader.load(path, "PackedScene")
 		if not packed is PackedScene:
 			return Wire.failure("SCENE_NOT_FOUND", "File is not a loadable PackedScene.")
-		EditorInterface.open_scene_from_path(path)
+		var inherited: bool = method == "scene.open" and params.get("inherited", false)
+		var previous_root := root
+		EditorInterface.open_scene_from_path(path, inherited)
 		for attempt in 60:
 			await plugin.get_tree().process_frame
 			root = EditorInterface.get_edited_scene_root()
-			if root and root.scene_file_path == path:
+			if inherited and root and root != previous_root and root.scene_file_path.is_empty():
+				# A new inherited scene is unsaved: it has no path until saved with scene.save_as.
+				return success({"scene_path": "", "root": String(root.name), "inherited_from": path})
+			if not inherited and root and root.scene_file_path == path:
 				track(root)
 				return success({"scene_path": path, "root": String(root.name)})
 		return Wire.failure("EDITOR_BUSY", "Editor did not finish switching scenes; inspect current scene before retrying.")

@@ -43,7 +43,16 @@ contain only the instance entry plus overrides. `node.instantiate` uses
 `PackedScene.GEN_EDIT_STATE_INSTANCE` with an undoable attach, rejecting self or
 transitive recursion via `ResourceLoader.get_dependencies`. Property edits inside
 an instance require `Node.is_editable_instance` on the owning instance root.
-Nested-instance internals stay read-only.
+Nested-instance internals stay read-only. `Node.remove_child` clears the owner of
+every node owned from outside the removed branch (for example children added below an
+instance), so delete/reparent/undo/redo record the exact set of root-owned nodes
+beforehand and restore precisely that set; ownership is never inferred from null
+owners. The recursion/`@tool` dependency scan also follows script base chains and
+quoted `res://` paths in GDScript sources, prefers a uid when the recorded path is
+gone, and fails closed beyond 512 files. Subtree operations scan every descendant,
+including instance internals, for `@tool` scripts. Duplicating an instance that has
+editable children or children added below it is refused (`UNSUPPORTED_OPERATION`)
+because re-instantiation would silently drop them.
 
 Inherited scenes: `Node.get_scene_inherited_state()` is not exposed to scripts, so
 base-scene membership comes from the edited scene's saved file. Its PackedScene
@@ -51,8 +60,10 @@ base-scene membership comes from the edited scene's saved file. Its PackedScene
 whole base chain form the inherited set, cached per root instance id and file
 fingerprint (mtime and size). A path in the set is inherited even if the node was
 derived-only, and if a base file changes after first use, or the file cannot be
-loaded, every node counts as inherited (reopen the scene). Unsaved scenes have no
-file and are treated as not inherited. Inherited nodes accept overrides and new
+loaded, every node counts as inherited (reopen the scene). Unsaved scenes (a new
+inherited scene from `scene.open --inherited`) are detected by packing the live root,
+which records the base chain the editor loaded. The baseline is taken when the editor
+opens the scene (`scene_changed`), and cache entries of closed scenes are pruned. Inherited nodes accept overrides and new
 children; delete, rename, reparent and duplicate are rejected.
 
 Paths are root-relative and change after renames/reparenting. String `instance_id`

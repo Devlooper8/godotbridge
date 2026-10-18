@@ -122,6 +122,8 @@ static func script_variables(node: Node) -> Dictionary:
 static func coerce(info: Dictionary, value: Variant) -> Variant:
 	if info.type == TYPE_FLOAT and value is int:
 		return float(value)
+	if info.type == TYPE_INT and value is float:
+		return int(value) # JSON numbers arrive as floats; fits() has already required an integral value.
 	if info.type == TYPE_STRING_NAME and value is String:
 		return StringName(value)
 	return value
@@ -153,7 +155,36 @@ static func fits(info: Dictionary, key: String, value: Variant) -> bool:
 			return false
 		if key in ["radial_segments", "rings"] and (value < 4 or value > 256):
 			return false
-		return true
+		return key != "" or hint_allows(info, value)
+	if info.type == TYPE_STRING and key == "" and info.hint == PROPERTY_HINT_ENUM:
+		return value is String and value in enum_entries(info.hint_string).keys()
 	if key in ["size", "scale"] and value is Vector3 and (value.x <= 0 or value.y <= 0 or value.z <= 0):
 		return false
 	return typeof(value) == info.type
+
+## @export_range / @export_enum limits of a script variable (the editor inspector enforces them).
+static func hint_allows(info: Dictionary, value: Variant) -> bool:
+	if info.hint == PROPERTY_HINT_RANGE:
+		var parts: PackedStringArray = info.hint_string.split(",")
+		if parts.size() >= 2 and parts[0].is_valid_float() and parts[1].is_valid_float():
+			if value < float(parts[0]) and not "or_less" in parts:
+				return false
+			if value > float(parts[1]) and not "or_greater" in parts:
+				return false
+	elif info.hint == PROPERTY_HINT_ENUM and info.type == TYPE_INT:
+		return int(value) in enum_entries(info.hint_string).values() # Array.has is type-strict.
+	return true
+
+## "A,B:5,C" -> {"A": 0, "B": 5, "C": 6}
+static func enum_entries(hint_string: String) -> Dictionary:
+	var result := {}
+	var next := 0
+	for entry in hint_string.split(","):
+		var pair := entry.rsplit(":", true, 1)
+		if pair.size() == 2 and pair[1].is_valid_int():
+			next = int(pair[1])
+			result[pair[0]] = next
+		else:
+			result[entry] = next
+		next += 1
+	return result
