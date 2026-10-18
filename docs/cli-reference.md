@@ -71,7 +71,10 @@ godotctl node translate Object 1 0 0 [--world]
 `list` lists open editor tabs. `close` refuses unsaved scenes. Create/save-as
 refuse existing destinations. Save detects external changes since opening/saving.
 Root deletion/duplication, traversal and sibling collisions are rejected.
-Inherited-scene mutations are read-only in this release. Scene instances follow
+In an inherited scene, nodes that come from the base scene (see `inherited` in
+`node inspect`) accept property/transform edits and new children; delete, rename,
+reparent and duplicate are rejected with `READ_ONLY_RESOURCE`. Nodes added in the
+derived scene are ordinary nodes. Scene instances follow
 the editor: the instance root accepts property/transform edits, rename, delete,
 reparent and duplicate; its internal nodes are read-only for delete/rename/
 reparent/duplicate, and accept property/transform edits and new children only

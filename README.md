@@ -79,10 +79,11 @@ Screenshots are returned as MCP image content and structured artifact metadata.
 | Managed game | Real running scene, bounded stdout/stderr, lifecycle and runtime PNG |
 | Editor play | Public play/stop/status APIs; no captured debugger log stream |
 
-Inherited scenes are read-only for mutations in this release. Scene instances
-follow the editor's rules: the instance root is editable, its internals only
-with editable children, and `node.instantiate` adds instances. Non-`@tool`
-scripted nodes are editable; `@tool` scripts need `allow_tool_script`.
+Mutations follow the editor's rules. Inherited-scene nodes accept property and
+transform overrides and new children, but cannot be deleted, renamed, reparented
+or duplicated. Scene instance roots are editable and `node.instantiate` adds
+instances; instance internals need editable children. Non-`@tool` scripted nodes
+and their exported variables are editable; `@tool` scripts need `allow_tool_script`.
 Preview images omit gameplay, animation, particles, skinning and
 the scene's WorldEnvironment. Editor camera transforms are readable; use preview
 viewpoints to control framing. See [architecture](docs/architecture.md) and [security](docs/security.md).

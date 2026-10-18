@@ -45,6 +45,16 @@ transitive recursion via `ResourceLoader.get_dependencies`. Property edits insid
 an instance require `Node.is_editable_instance` on the owning instance root.
 Nested-instance internals stay read-only.
 
+Inherited scenes: `Node.get_scene_inherited_state()` is not exposed to scripts, so
+base-scene membership comes from the edited scene's saved file. Its PackedScene
+(`CACHE_MODE_IGNORE`) yields `SceneState.get_base_scene_state()`; node paths of the
+whole base chain form the inherited set, cached per root instance id and file
+fingerprint (mtime and size). A path in the set is inherited even if the node was
+derived-only, and if a base file changes after first use, or the file cannot be
+loaded, every node counts as inherited (reopen the scene). Unsaved scenes have no
+file and are treated as not inherited. Inherited nodes accept overrides and new
+children; delete, rename, reparent and duplicate are rejected.
+
 Paths are root-relative and change after renames/reparenting. String `instance_id`
 preserves 64-bit precision but is session-only, not a persistent GUID. Scene tree
 inspection is limited to 10,000 nodes; meshes include local/world AABBs.

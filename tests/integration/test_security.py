@@ -99,6 +99,7 @@ def test_instance_and_inherited_boundaries(editor):
     editor.call("editor.undo")
     editor.call("node.inspect", path="Instance/Child")
     editor.call("scene.open", path="res://scenes/inherited.tscn")
+    editor.call("node.create", name="Allowed")
     with pytest.raises(BridgeError) as error:
-        editor.call("node.create", name="Restricted")
+        editor.call("node.delete", path="Child")
     assert error.value.code == "READ_ONLY_RESOURCE"

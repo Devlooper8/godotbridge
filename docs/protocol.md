@@ -51,6 +51,29 @@ then writes the result files in Python. `viewport.capture` returns a private
 temporary image path to the client; it never accepts an arbitrary output path
 for the plugin to write. CLI/MCP then validate and copy the artifact within the project.
 
+## Node mutation rules
+
+Mutating `node.*` methods return `READ_ONLY_RESOURCE` when the editor itself would
+not allow the change, with these rules:
+
+- **@tool scripts:** nodes whose script `is_tool()` are rejected unless the request
+  sets `allow_tool_script: true` (default `false`). Non-`@tool` scripted nodes are
+  editable; their exported variables appear in `node.properties` with
+  `"script": true` and `node.set_property` type-checks values against them.
+- **Instances:** the instance root (owner is the edited root) accepts all
+  operations. Nodes inside an instance accept `node.set_property`,
+  `node.set_transform` and new children only when the owning instance root has
+  editable children (`node.set_editable_children`); delete, rename, reparent and
+  duplicate are always rejected. `node.instantiate` adds an instance
+  (`scene`, `parent`, optional `name`); self or recursive instancing is
+  `INVALID_ARGUMENT`.
+- **Inherited scenes:** nodes of the base scene chain accept property/transform
+  edits and new children but not delete, rename, reparent or duplicate.
+
+`node.inspect` and `scene.tree` entries report `script`, `tool_script`, `groups`,
+`inherited` and `instance` (`is_instance_root`, `editable_children`,
+`inside_instance`).
+
 ## Typed values
 
 No raw Variant stringification is used. Primitive bool/number/string/null values

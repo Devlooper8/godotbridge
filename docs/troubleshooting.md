@@ -22,7 +22,9 @@ execution-policy change is required.
 mutation's outcome is unknown; inspect the scene before retrying. Viewport PNG
 readback/encoding can briefly occupy the editor thread.
 
-**READ_ONLY_RESOURCE:** inherited scenes, nodes inside scene instances (enable
+**READ_ONLY_RESOURCE:** structure changes to inherited-scene nodes (also returned
+for every node when the base scene changed on disk after the scene was opened:
+reopen the scene), nodes inside scene instances (enable
 `node.set_editable_children` for property edits; structure changes always belong
 to the source scene) and `@tool` scripted nodes are protected. Open the source
 scene or edit through the normal editor;

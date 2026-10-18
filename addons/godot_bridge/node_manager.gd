@@ -7,6 +7,8 @@ const Scenes = preload("scene_manager.gd")
 var undo: EditorUndoRedoManager
 var root: Node
 var error := {}
+var base_cache := {} # root instance id -> parsed base-scene info, see base_info().
+var memo := {}
 var allow_tool := false # Per-request opt-in to mutate nodes whose script is @tool.
 
 func _init(manager: EditorUndoRedoManager) -> void:
@@ -25,11 +27,9 @@ func resolve(path: String) -> Node:
 ## The editor's own rules apply: a scene instance is one node owned by the edited root whose internals are
 ## owned by the instance. Those internals are only editable through "editable children".
 func editable(node: Node, mode: String = "edit", subtree: bool = false) -> bool:
-	if not root.scene_file_path.is_empty():
-		var scene = ResourceLoader.load(root.scene_file_path, "PackedScene")
-		if scene is PackedScene and scene.get_state().get_base_scene_state() != null:
-			error = Wire.failure("READ_ONLY_RESOURCE", "Inherited scenes are read-only in this release; edit the base scene.")
-			return false
+	if mode == "structure" and is_inherited(node):
+		error = Wire.failure("READ_ONLY_RESOURCE", "Node is inherited from the base scene and cannot be deleted, renamed, reparented or duplicated; edit the base scene. " + base_info().get("reason", ""))
+		return false
 	if inside_instance(node):
 		var host := instance_host(node)
 		if mode == "structure":
@@ -52,6 +52,83 @@ func editable(node: Node, mode: String = "edit", subtree: bool = false) -> bool:
 			if child.owner == root and not editable(child, "edit", true):
 				return false
 	return true
+
+## Inherited-scene support. The editor keeps no public record of which nodes came from the base scene
+## (Node.get_scene_inherited_state() is not exposed to scripts), so the edited scene's saved file is the
+## source: every node path found in its PackedScene's base-scene state chain is inherited. Properties and
+## new children of those nodes are editable (the editor stores them as overrides); deleting, renaming,
+## reparenting or duplicating them would corrupt the inheritance and is rejected.
+## Conservative rules: a path in the base set is inherited even if the node is in fact derived-only, and
+## if the base chain changed on disk since first use (the open tree can no longer be matched to it), or
+## the file cannot be loaded, every node is treated as inherited. Unsaved scenes have no file and are
+## treated as not inherited.
+func is_inherited(node: Node) -> bool:
+	var info := base_info()
+	if not info.get("inherited", false):
+		return false
+	if info.get("unknown", false):
+		return true
+	var path := String(root.get_path_to(node))
+	return info.paths.has(path)
+
+func base_info() -> Dictionary:
+	var frame := Engine.get_process_frames()
+	var id := root.get_instance_id()
+	if memo.get("frame") == frame and memo.get("id") == id:
+		return memo.info
+	var info := _base_info(id)
+	memo = {"frame": frame, "id": id, "info": info}
+	return info
+
+func _base_info(id: int) -> Dictionary:
+	var path := root.scene_file_path
+	if path.is_empty():
+		return {}
+	var key := fingerprint(path)
+	var entry: Dictionary = base_cache.get(id, {})
+	if entry.is_empty() or entry.key != key:
+		var fresh := _read_base(path)
+		fresh.key = key
+		# The first-seen base fingerprints stand for the tree the editor loaded; later differences mean it is outdated.
+		fresh.first_files = entry.get("first_files", fresh.get("files", {}))
+		fresh.stale = entry.get("stale", false) or (entry.has("first_files") and fresh.get("files", {}).keys() != entry.first_files.keys())
+		entry = fresh
+		base_cache[id] = entry
+	if entry.get("inherited", false) and not entry.stale:
+		for file in entry.first_files:
+			if fingerprint(file) != entry.first_files[file]:
+				entry.stale = true
+				break
+	if entry.get("inherited", false) and entry.stale:
+		return {"inherited": true, "unknown": true, "reason": "The base scene changed on disk after this scene was opened; reopen the scene."}
+	return entry
+
+func _read_base(path: String) -> Dictionary:
+	var scene = ResourceLoader.load(path, "PackedScene", ResourceLoader.CACHE_MODE_IGNORE)
+	if not scene is PackedScene:
+		return {"inherited": true, "unknown": true, "files": {}, "reason": "The scene file could not be loaded to find its base scene."}
+	var state: SceneState = scene.get_state()
+	if state.get_base_scene_state() == null:
+		return {"inherited": false}
+	var paths := {}
+	var files := {}
+	var current: SceneState = state
+	for depth in 32:
+		var base := current.get_base_scene_state()
+		if base == null:
+			break
+		var source = current.get_node_instance(0)
+		if source is PackedScene and not source.resource_path.is_empty():
+			files[source.resource_path] = fingerprint(source.resource_path)
+		for index in base.get_node_count():
+			var node_path := String(base.get_node_path(index))
+			paths[node_path.substr(2) if node_path.begins_with("./") else node_path] = true
+		current = base
+	return {"inherited": true, "paths": paths, "files": files}
+
+static func fingerprint(path: String) -> String:
+	var file := FileAccess.open(path, FileAccess.READ)
+	return "" if file == null else "%d:%d" % [FileAccess.get_modified_time(path), file.get_length()]
 
 func inside_instance(node: Node) -> bool:
 	return node != root and node.owner != root
@@ -105,7 +182,7 @@ func describe(node: Node) -> Dictionary:
 		"script": node.get_script().resource_path if node.get_script() else null, "tool_script": is_tool_script(node),
 		"groups": node.get_groups().filter(func(group): return not String(group).begins_with("_")),
 		"instance": {"is_instance_root": is_instance_root(node), "editable_children": is_instance_root(node) and root.is_editable_instance(node),
-			"inside_instance": inside_instance(node)}}
+			"inside_instance": inside_instance(node)}, "inherited": is_inherited(node)}
 	if node is Node3D:
 		result.merge({"position": Codec.encode(node.position), "rotation_degrees": Codec.encode(node.rotation_degrees),
 			"scale": Codec.encode(node.scale), "local_transform": Codec.encode(node.transform),
@@ -213,6 +290,8 @@ func handle(method: String, params: Dictionary) -> Dictionary:
 			copy.name = node_name
 			return add_node(node.get_parent(), copy)
 		"node.rename":
+			if node == root:
+				return Wire.failure("INVALID_ARGUMENT", "Cannot rename the scene root.")
 			if not valid_name(node.get_parent(), params.name, node):
 				return error
 			return set_properties(node, {"name": params.name})

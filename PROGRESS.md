@@ -37,6 +37,7 @@
 - Headless saves now suppress thumbnails through the public editor API; save-as and selection tested.
 - Final headless suite: `python scripts/run_integration_tests.py` — **56 passed, 1 intentionally skipped** (graphical editor play).
 - Final graphical suite: `python scripts/run_integration_tests.py --graphical` — **57 passed**.
+- Scene-mutation milestones (scripted nodes, instances, inherited scenes; 16 new integration tests): headless **72 passed, 1 skipped**; graphical **73 passed** (one unrelated managed-game test failed once on the first run and passed on rerun and in isolation).
 - Unit-only: `python -m pytest tests/unit -q` — **13 passed**.
 - Installed-wheel graphical verification: `python -m pytest -o pythonpath=.artifacts/wheel-final tests/integration/test_connection.py tests/integration/test_mcp.py tests/integration/test_three_d.py --engine --graphical --basetemp .artifacts/pytest-wheel-final -q` — **10 passed**. This exercised the installed package's bundled addon against the real engine.
 - Both documented CLI and Python arena workflows executed, including save, validation, reopen and snapshot.
@@ -48,8 +49,9 @@
 ## Known limitations
 
 - 0.1.0 is a release candidate; Linux/macOS and Python 3.11 CI have not run here.
-- Instances, inherited scenes and scripted nodes are read-only for mutations.
-- Duplicate omits scripts/signals/groups. No cross-command atomic transaction API.
+- Mutation rules follow the editor: `@tool`-script nodes need `allow_tool_script`; instance internals need editable children and nested-instance internals stay read-only; inherited nodes take overrides only.
+- Inherited detection reads the saved scene file (`get_scene_inherited_state()` is not exposed to GDScript): unsaved inherited scenes look non-inherited, and if a base file changes after first use every node is treated as inherited until the scene is reopened.
+- Script variables are type-checked, not range/enum-checked; only scalar, vector, color, NodePath and simple-resource values are encodable. No cross-command atomic transaction API.
 - Preview omits animation, particles, skinning, gameplay and WorldEnvironment.
 - Editor camera is readable; framing uses the separate preview camera. Focus selects/switches workspace without moving the camera.
 - Full debugger introspection, editor log streaming, script authoring and C# compilation are not implemented.
@@ -61,6 +63,6 @@
 
 - Run `.github/workflows/ci.yml` on Linux/macOS/Python 3.11 before labeling the release stable; inspect permission setup, application-bundle discovery and Xvfb captures on those hosts.
 - Add atomic multi-command batches with full prevalidation and rollback, backed by one editor undo action.
-- Design guarded instance/inherited/scripted-node editing and coordinate script-file writes with dirty editor buffers before exposing script-authoring tools.
+- Coordinate script-file writes with dirty editor buffers before exposing script-authoring tools.
 - Add a supported EditorDebuggerPlugin integration for editor-managed logs and runtime inspection; retain the distinction from managed stdout capture.
 - Add bounded capture-cache retention and supervisor crash-recovery tooling without signalling stored PIDs.
