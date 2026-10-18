@@ -166,7 +166,7 @@ its entry budget, so some inlined children were left out). Children are summarie
 `name` (object properties). `depth` inlines `children` (with `child_total`,
 `children_truncated`) into each listed child; a child that contains itself is marked
 `cycle: true` and not inlined, and can still be addressed by path. Object properties
-whose script declares a custom getter are `unread: true`: reading them would run user
+whose script declares a custom getter, or whose script has no readable GDScript source, are `unread: true`: reading them would run user
 code inside the debugger break, so they are never read (asking for one by path fails with
 `UNSUPPORTED_OPERATION`). Nothing is retained between calls: a path that no longer
 resolves (the game moved on and the element is gone) fails with `VARIABLE_NOT_FOUND`.

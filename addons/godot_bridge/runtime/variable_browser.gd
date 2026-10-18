@@ -233,17 +233,24 @@ static func _properties(object: Object) -> Array:
 	for info in object.get_property_list():
 		if info.usage & SKIPPED_USAGE != 0 or info.usage & LISTED_USAGE == 0:
 			continue
-		result.append({"name": info.name, "type": info.type, "unread": risky.has(info.name)})
+		var unknown: bool = risky.has("*") and info.usage & PROPERTY_USAGE_SCRIPT_VARIABLE != 0
+		result.append({"name": info.name, "type": info.type, "unread": unknown or risky.has(info.name)})
 	return result
 
-## Names of script variables declared with a `get` accessor in this object's script chain, found by
-## reading the source (the engine does not expose accessors). Over-approximates on purpose.
+## Names of script variables that must not be read because they may have a `get` accessor, found by reading
+## the source of the object's script chain (the engine does not expose accessors). Fails closed: a script
+## whose source is missing or is not GDScript (binary-tokenized, C#, ...) cannot be inspected, so every
+## variable it declares, and every script variable of the object, is treated as having a getter.
 static func _getter_names(object: Object) -> Dictionary:
 	var names := {}
 	var script: Script = object.get_script()
 	while script != null:
-		if script is GDScript:
+		if script is GDScript and script.source_code.strip_edges() != "":
 			_scan_getters(script.source_code, names)
+		else:
+			names["*"] = true
+			for info in script.get_script_property_list():
+				names[info.name] = true
 		script = script.get_base_script()
 	return names
 

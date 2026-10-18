@@ -7,6 +7,8 @@ pytestmark = pytest.mark.engine
 
 SCRIPT = """extends Node3D
 
+var plain := 42
+
 var risky: int:
 	get:
 		print("GETTER RAN")
@@ -30,6 +32,16 @@ func probe():
 	dead.free()
 	var many := range(250)
 	var typed: Array[int] = [4, 5]
+	# A script whose source is gone cannot be checked for getters, so its variables are never read.
+	var script := GDScript.new()
+	script.source_code = "extends Node
+var hidden := 5
+"
+	script.reload()
+	var dyn := Node.new()
+	dyn.set_script(script)
+	add_child(dyn)
+	script.source_code = ""
 	var grid := []
 	for i in 24:
 		grid.append(range(24))
@@ -157,6 +169,15 @@ def test_getters_are_never_executed_and_errors(stopped_game):
     # `risky` has a getter containing `breakpoint`; reading it would re-enter the debugger.
     props = named(variables(editor, path=["me"], limit=200)["children"])
     assert props["risky"]["unread"] is True and props["risky"]["expandable"] is False
+    assert props["plain"]["value"] == 42 and "unread" not in props["plain"]
+
+    # Fail closed: no source to check, so nothing the script declares is read.
+    dyn = named(variables(editor, path=["dyn"], limit=200)["children"])
+    assert dyn["hidden"]["unread"] is True and "value" not in dyn["hidden"]
+    assert dyn["process_mode"]["value"] == 0  # engine properties are still shown
+    rejected(
+        editor, "debug.variables", "UNSUPPORTED_OPERATION", path=["dyn", {"property": "hidden"}]
+    )
     rejected(editor, "debug.variables", "UNSUPPORTED_OPERATION", path=["me", {"property": "risky"}])
     assert editor.call("debug.status")["breaked"] is True
     assert editor.call("debug.stack")["frames"][0]["function"] == "probe"

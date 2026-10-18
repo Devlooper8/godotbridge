@@ -166,9 +166,13 @@ unreliable on 4.7.2, see PROGRESS.md) over the same plugin/autoload channel.
   Containers or objects that contain themselves are marked `cycle` (compared with
   `is_same`) and never inlined. Objects list `EDITOR`/`STORAGE`/script properties; freed
   objects are marked `freed`. Script variables with a custom `get` accessor (found by
-  reading the script source) are listed as `unread` and never read, because the read would
+  reading the script source) are listed as `unread` and never read; a script whose source is
+  unavailable (not GDScript, or empty) fails closed: all of its variables are `unread`, because the read would
   run user code inside the break. Godot's own break handling evaluates getters when it
-  synchronises frame variables with the editor, which the bridge cannot prevent.
+  synchronises frame variables with the editor, which the bridge cannot prevent. That
+  sync also logs thousands of `encode_variant` "infinite recursion" errors to the game log
+  while a self-referencing array is a local of the stopped frame; this happens in plain
+  Godot without the bridge and is not caused by it.
 - **Execution control** sends Godot's internal debugger commands with
   `EditorDebuggerSession.send_message`. They are not a documented API; they are confined
   to the `ENGINE_COMMANDS` table in `debugger_plugin.gd`, and `test_debug_control.py`
