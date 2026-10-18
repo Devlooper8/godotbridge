@@ -6,6 +6,7 @@ const Codec = preload("codec.gd")
 var undo: EditorUndoRedoManager
 var root: Node
 var error := {}
+var allow_tool := false # Per-request opt-in to mutate nodes whose script is @tool.
 
 func _init(manager: EditorUndoRedoManager) -> void:
 	undo = manager
@@ -31,14 +32,36 @@ func editable(node: Node, subtree: bool = false) -> bool:
 			error = Wire.failure("READ_ONLY_RESOURCE", "Scene instances and unowned nodes are read-only; edit their source scene.")
 			return false
 		ancestor = ancestor.get_parent()
-	if node.get_script() != null:
-		error = Wire.failure("READ_ONLY_RESOURCE", "Scripted nodes are read-only to avoid executing custom setters or lifecycle code.")
+	# Non-@tool scripts only exist as placeholder instances in the editor: no setters, _ready or
+	# _process run, so editing them is as safe as editing a built-in node.
+	if is_tool_script(node) and not allow_tool:
+		error = Wire.failure("READ_ONLY_RESOURCE", "Node has a @tool script that runs inside the editor; pass allow_tool_script to mutate it anyway.")
 		return false
 	if subtree:
 		for child in node.get_children():
 			if not editable(child, true):
 				return false
 	return true
+
+static func is_tool_script(node: Node) -> bool:
+	var script: Script = node.get_script()
+	return script != null and script.is_tool()
+
+## Exported script variables (name -> property info) are the only non-allowlisted properties exposed.
+## A placeholder instance lists them without PROPERTY_USAGE_SCRIPT_VARIABLE, so the flag is read from the script itself.
+static func script_variables(node: Node) -> Dictionary:
+	var result := {}
+	var script: Script = node.get_script()
+	if script == null:
+		return result
+	var names := {}
+	for info in script.get_script_property_list():
+		if Codec.is_script_variable(info):
+			names[info.name] = true
+	for info in node.get_property_list():
+		if names.has(info.name):
+			result[info.name] = info
+	return result
 
 func valid_name(parent: Node, value: String, exclude: Node = null) -> bool:
 	if value.is_empty() or value.validate_node_name() != value or value in [".", ".."] or value.begins_with("@"):
@@ -53,7 +76,9 @@ func valid_name(parent: Node, value: String, exclude: Node = null) -> bool:
 func describe(node: Node) -> Dictionary:
 	var result := {"node_path": String(root.get_path_to(node)), "name": String(node.name),
 		"class": node.get_class(), "instance_id": str(node.get_instance_id()),
-		"scene_file_path": node.scene_file_path, "selected": node in EditorInterface.get_selection().get_selected_nodes()}
+		"scene_file_path": node.scene_file_path, "selected": node in EditorInterface.get_selection().get_selected_nodes(),
+		"script": node.get_script().resource_path if node.get_script() else null, "tool_script": is_tool_script(node),
+		"groups": node.get_groups().filter(func(group): return not String(group).begins_with("_"))}
 	if node is Node3D:
 		result.merge({"position": Codec.encode(node.position), "rotation_degrees": Codec.encode(node.rotation_degrees),
 			"scale": Codec.encode(node.scale), "local_transform": Codec.encode(node.transform),
@@ -90,6 +115,7 @@ func tree() -> Dictionary:
 func handle(method: String, params: Dictionary) -> Dictionary:
 	root = EditorInterface.get_edited_scene_root()
 	error = {}
+	allow_tool = params.get("allow_tool_script", false)
 	if root == null:
 		return Wire.failure("SCENE_NOT_OPEN", "Open or create a scene first.")
 	if method == "scene.tree":
@@ -123,9 +149,11 @@ func handle(method: String, params: Dictionary) -> Dictionary:
 		return success(describe(node))
 	if method in ["node.properties", "node.get_property"]:
 		var properties := []
+		var script_vars := script_variables(node)
 		for info in node.get_property_list():
-			if info.name in Codec.NODE_PROPERTIES:
-				properties.append({"name": info.name, "type": type_string(info.type), "value": Codec.encode(node.get(info.name))})
+			var from_script := script_vars.has(info.name)
+			if info.name in Codec.NODE_PROPERTIES or from_script:
+				properties.append({"name": info.name, "type": type_string(info.type), "value": Codec.encode(node.get(info.name)), "script": from_script})
 		if method == "node.properties":
 			return success({"node_path": params.get("path", "."), "properties": properties})
 		for info in properties:
@@ -150,7 +178,8 @@ func handle(method: String, params: Dictionary) -> Dictionary:
 			var node_name: String = params.get("name") if params.get("name") != null else String(node.name) + "Copy"
 			if not valid_name(node.get_parent(), node_name):
 				return error
-			var copy := node.duplicate(0) # No scripts, connections, groups or instantiation.
+			# Keep scripts (placeholder-safe unless allow_tool_script), persistent signals, groups and instancing.
+			var copy := node.duplicate(Node.DUPLICATE_SIGNALS | Node.DUPLICATE_GROUPS | Node.DUPLICATE_SCRIPTS | Node.DUPLICATE_USE_INSTANTIATION)
 			copy.name = node_name
 			return add_node(node.get_parent(), copy)
 		"node.rename":
@@ -158,12 +187,13 @@ func handle(method: String, params: Dictionary) -> Dictionary:
 				return error
 			return set_properties(node, {"name": params.name})
 		"node.set_property":
-			if not params.property in Codec.NODE_PROPERTIES:
-				return Wire.failure("UNSUPPORTED_PROPERTY", "Property is not allowlisted.")
+			var info := {} if params.property in Codec.NODE_PROPERTIES else script_variables(node).get(params.property, {})
+			if info.is_empty() and not params.property in Codec.NODE_PROPERTIES:
+				return Wire.failure("UNSUPPORTED_PROPERTY", "Property is not allowlisted or an exported script variable.")
 			var value := Codec.decode(params.value)
-			if not value.ok or not Codec.compatible(node, params.property, value.get("value")):
+			if not value.ok or not (Codec.compatible(node, params.property, value.get("value")) if info.is_empty() else Codec.fits(info, "", value.get("value"))):
 				return Wire.failure("INVALID_ARGUMENT", "Property value has the wrong type or unsupported resource configuration.")
-			return set_properties(node, {params.property: value.value})
+			return set_properties(node, {params.property: value.value if info.is_empty() else Codec.coerce(info, value.value)})
 		"node.set_transform":
 			return set_transform(node, params)
 		"node.reparent":

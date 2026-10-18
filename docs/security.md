@@ -17,7 +17,8 @@ compromised process running as the same OS user.
   image dimensions and returned log size are bounded. Polling never blocks on
   incomplete network input.
 - Both client and plugin validate arguments. Node/resource creation uses explicit
-  allowlists. Properties cannot reach scripts, owners, arbitrary objects or methods.
+  allowlists. Properties cannot reach scripts, owners, arbitrary objects or methods; the only
+  non-allowlisted properties are a node's exported script variables, type-checked.
 - Node paths cannot escape the edited root. Scene paths are `res://` `.tscn`
   paths and reject traversal, private directories and symbolic links. Python
   resolves output/resource paths and confines them to the configured project.
@@ -40,9 +41,10 @@ scene `_init` smoke tests and runtime play. Validation and game execution are
 for trusted projects. Geometry previews avoid instantiating scene scripts, but
 render existing assets/shaders in the trusted editor process.
 
-Scripted nodes, inherited scenes and scene instance branches are read-only for
-bridge mutations. This conservative policy avoids custom setters and ambiguous
-ownership. It can be relaxed only with explicit engine tests for each new behavior.
+Inherited scenes and scene instance branches are read-only for bridge mutations.
+Nodes with non-`@tool` scripts are editable (the editor only runs placeholder
+instances for them); `@tool` script nodes require the explicit `allow_tool_script`
+opt-in. This policy avoids ambiguous ownership. It can be relaxed only with explicit engine tests for each new behavior.
 
 Project-local scripts running with the same user's rights can already access the
 token and project. Shared/network folders and pre-existing unusual explicit ACLs

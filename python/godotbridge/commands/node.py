@@ -17,25 +17,51 @@ def add(
     type: str = "Node3D",
     parent: str = ".",
     json_output: bool = typer.Option(False, "--json"),
+    allow_tool_script: bool = typer.Option(False, help="Allow mutating nodes with a @tool script."),
 ):
-    perform("node.create", json_output, name=name, type=type, parent=parent)
+    perform(
+        "node.create",
+        json_output,
+        name=name,
+        type=type,
+        parent=parent,
+        allow_tool_script=allow_tool_script,
+    )
 
 
 @app.command()
-def remove(path: str, json_output: bool = typer.Option(False, "--json")):
-    perform("node.delete", json_output, path=path)
+def remove(
+    path: str,
+    json_output: bool = typer.Option(False, "--json"),
+    allow_tool_script: bool = typer.Option(False, help="Allow mutating nodes with a @tool script."),
+):
+    perform("node.delete", json_output, path=path, allow_tool_script=allow_tool_script)
 
 
 @app.command()
 def duplicate(
-    path: str, name: str | None = None, json_output: bool = typer.Option(False, "--json")
+    path: str,
+    name: str | None = None,
+    json_output: bool = typer.Option(False, "--json"),
+    allow_tool_script: bool = typer.Option(False, help="Allow mutating nodes with a @tool script."),
 ):
-    perform("node.duplicate", json_output, path=path, name=name)
+    perform(
+        "node.duplicate",
+        json_output,
+        path=path,
+        name=name,
+        allow_tool_script=allow_tool_script,
+    )
 
 
 @app.command()
-def rename(path: str, name: str, json_output: bool = typer.Option(False, "--json")):
-    perform("node.rename", json_output, path=path, name=name)
+def rename(
+    path: str,
+    name: str,
+    json_output: bool = typer.Option(False, "--json"),
+    allow_tool_script: bool = typer.Option(False, help="Allow mutating nodes with a @tool script."),
+):
+    perform("node.rename", json_output, path=path, name=name, allow_tool_script=allow_tool_script)
 
 
 @app.command()
@@ -44,8 +70,16 @@ def reparent(
     parent: str,
     keep_global: bool = True,
     json_output: bool = typer.Option(False, "--json"),
+    allow_tool_script: bool = typer.Option(False, help="Allow mutating nodes with a @tool script."),
 ):
-    perform("node.reparent", json_output, path=path, parent=parent, keep_global=keep_global)
+    perform(
+        "node.reparent",
+        json_output,
+        path=path,
+        parent=parent,
+        keep_global=keep_global,
+        allow_tool_script=allow_tool_script,
+    )
 
 
 @app.command()
@@ -70,12 +104,20 @@ def get(path: str, property: str, json_output: bool = typer.Option(False, "--jso
 
 @app.command("set")
 def set_property(
-    path: str, property: str, value: str, json_output: bool = typer.Option(False, "--json")
+    path: str,
+    property: str,
+    value: str,
+    json_output: bool = typer.Option(False, "--json"),
+    allow_tool_script: bool = typer.Option(False, help="Allow mutating nodes with a @tool script."),
 ):
     """Set a JSON value: true, a number, a quoted string, or a typed object."""
     execute(
         lambda: Client(config()).call(
-            "node.set_property", path=path, property=property, value=json.loads(value)
+            "node.set_property",
+            path=path,
+            property=property,
+            value=json.loads(value),
+            allow_tool_script=allow_tool_script,
         ),
         json_output,
     )
@@ -88,6 +130,9 @@ def transform_command(field: str, translate: bool = False):
         y: float,
         z: float,
         world: bool = False,
+        allow_tool_script: bool = typer.Option(
+            False, help="Allow mutating nodes with a @tool script."
+        ),
         json_output: bool = typer.Option(False, "--json"),
     ):
         perform(
@@ -96,6 +141,7 @@ def transform_command(field: str, translate: bool = False):
             path=path,
             world=world,
             translate=translate,
+            allow_tool_script=allow_tool_script,
             **{field: [x, y, z]},
         )
 

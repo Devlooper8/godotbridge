@@ -18,6 +18,7 @@ def primitive_command(kind: str):
         color: tuple[float, float, float, float] = (0.55, 0.65, 0.8, 1),
         position: tuple[float, float, float] = (0, 0, 0),
         collision: bool = True,
+        allow_tool_script: bool = typer.Option(False, help="Allow a parent with a @tool script."),
         json_output: bool = typer.Option(False, "--json"),
     ):
         perform(
@@ -32,6 +33,7 @@ def primitive_command(kind: str):
             color=color,
             position=position,
             collision=collision,
+            allow_tool_script=allow_tool_script,
         )
 
     command.__doc__ = f"Create a {kind} with material and optional collision as one undo action."
@@ -51,6 +53,7 @@ def light(
     position: tuple[float, float, float] = (0, 5, 0),
     rotation: tuple[float, float, float] = (-45, -30, 0),
     color: tuple[float, float, float, float] = (1, 1, 1, 1),
+    allow_tool_script: bool = typer.Option(False, help="Allow a parent with a @tool script."),
     json_output: bool = typer.Option(False, "--json"),
 ):
     perform(
@@ -63,6 +66,7 @@ def light(
         position=position,
         rotation=rotation,
         color=color,
+        allow_tool_script=allow_tool_script,
     )
 
 
@@ -73,6 +77,7 @@ def camera(
     position: tuple[float, float, float] = (10, 8, 12),
     target: tuple[float, float, float] = (0, 0, 0),
     fov: float = 70,
+    allow_tool_script: bool = typer.Option(False, help="Allow a parent with a @tool script."),
     json_output: bool = typer.Option(False, "--json"),
 ):
     perform(
@@ -83,4 +88,5 @@ def camera(
         position=position,
         target=target,
         fov=fov,
+        allow_tool_script=allow_tool_script,
     )

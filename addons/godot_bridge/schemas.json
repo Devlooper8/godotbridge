@@ -114,6 +114,12 @@
   "node.create": {
     "additionalProperties": false,
     "properties": {
+      "allow_tool_script": {
+        "default": false,
+        "description": "Permit mutating nodes whose script is @tool; such scripts run inside the editor.",
+        "title": "Allow Tool Script",
+        "type": "boolean"
+      },
       "type": {
         "default": "Node3D",
         "enum": [
@@ -157,6 +163,12 @@
   "node.delete": {
     "additionalProperties": false,
     "properties": {
+      "allow_tool_script": {
+        "default": false,
+        "description": "Permit mutating nodes whose script is @tool; such scripts run inside the editor.",
+        "title": "Allow Tool Script",
+        "type": "boolean"
+      },
       "path": {
         "default": ".",
         "description": "Path relative to edited scene root; '.' is root",
@@ -165,12 +177,18 @@
         "type": "string"
       }
     },
-    "title": "NodePath",
+    "title": "NodeMutation",
     "type": "object"
   },
   "node.rename": {
     "additionalProperties": false,
     "properties": {
+      "allow_tool_script": {
+        "default": false,
+        "description": "Permit mutating nodes whose script is @tool; such scripts run inside the editor.",
+        "title": "Allow Tool Script",
+        "type": "boolean"
+      },
       "path": {
         "default": ".",
         "description": "Path relative to edited scene root; '.' is root",
@@ -194,6 +212,12 @@
   "node.duplicate": {
     "additionalProperties": false,
     "properties": {
+      "allow_tool_script": {
+        "default": false,
+        "description": "Permit mutating nodes whose script is @tool; such scripts run inside the editor.",
+        "title": "Allow Tool Script",
+        "type": "boolean"
+      },
       "path": {
         "default": ".",
         "description": "Path relative to edited scene root; '.' is root",
@@ -222,6 +246,12 @@
   "node.reparent": {
     "additionalProperties": false,
     "properties": {
+      "allow_tool_script": {
+        "default": false,
+        "description": "Permit mutating nodes whose script is @tool; such scripts run inside the editor.",
+        "title": "Allow Tool Script",
+        "type": "boolean"
+      },
       "path": {
         "default": ".",
         "description": "Path relative to edited scene root; '.' is root",
@@ -302,6 +332,12 @@
     },
     "additionalProperties": false,
     "properties": {
+      "allow_tool_script": {
+        "default": false,
+        "description": "Permit mutating nodes whose script is @tool; such scripts run inside the editor.",
+        "title": "Allow Tool Script",
+        "type": "boolean"
+      },
       "path": {
         "default": ".",
         "description": "Path relative to edited scene root; '.' is root",
@@ -329,6 +365,12 @@
   "node.set_transform": {
     "additionalProperties": false,
     "properties": {
+      "allow_tool_script": {
+        "default": false,
+        "description": "Permit mutating nodes whose script is @tool; such scripts run inside the editor.",
+        "title": "Allow Tool Script",
+        "type": "boolean"
+      },
       "path": {
         "default": ".",
         "description": "Path relative to edited scene root; '.' is root",
@@ -493,6 +535,12 @@
   "3d.create_primitive": {
     "additionalProperties": false,
     "properties": {
+      "allow_tool_script": {
+        "default": false,
+        "description": "Permit mutating nodes whose script is @tool; such scripts run inside the editor.",
+        "title": "Allow Tool Script",
+        "type": "boolean"
+      },
       "name": {
         "maxLength": 128,
         "minLength": 1,
@@ -626,6 +674,12 @@
   "3d.create_light": {
     "additionalProperties": false,
     "properties": {
+      "allow_tool_script": {
+        "default": false,
+        "description": "Permit mutating nodes whose script is @tool; such scripts run inside the editor.",
+        "title": "Allow Tool Script",
+        "type": "boolean"
+      },
       "name": {
         "default": "Light",
         "maxLength": 128,
@@ -744,6 +798,12 @@
   "3d.create_camera": {
     "additionalProperties": false,
     "properties": {
+      "allow_tool_script": {
+        "default": false,
+        "description": "Permit mutating nodes whose script is @tool; such scripts run inside the editor.",
+        "title": "Allow Tool Script",
+        "type": "boolean"
+      },
       "name": {
         "default": "MainCamera",
         "maxLength": 128,

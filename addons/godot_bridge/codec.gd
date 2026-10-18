@@ -98,27 +98,46 @@ static func decode(value: Variant, depth: int = 0) -> Dictionary:
 				return {"ok": true, "value": resource}
 	return {"ok": false}
 
+## Takes a Script.get_script_property_list entry.
+static func is_script_variable(info: Dictionary) -> bool:
+	return info.usage & PROPERTY_USAGE_SCRIPT_VARIABLE != 0 and info.usage & (PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_STORAGE) != 0
+
+## Placeholder script instances store values verbatim, so normalise what the engine would convert.
+static func coerce(info: Dictionary, value: Variant) -> Variant:
+	if info.type == TYPE_FLOAT and value is int:
+		return float(value)
+	if info.type == TYPE_STRING_NAME and value is String:
+		return StringName(value)
+	return value
+
 static func compatible(object: Object, key: String, value: Variant) -> bool:
 	for info in object.get_property_list():
-		if info.name != key:
-			continue
-		if info.type == TYPE_OBJECT:
-			return value == null or (value is Resource and value.is_class(info.hint_string) and value.get_script() == null)
-		if info.type == TYPE_FLOAT or info.type == TYPE_INT:
-			if not (value is int or value is float) or not is_finite(float(value)):
-				return false
-			if info.type == TYPE_INT and float(value) != floor(float(value)):
-				return false
-			if absf(float(value)) > (4294967295.0 if info.type == TYPE_INT else 1000000000.0):
-				return false
-			if key == "fov" and (value <= 1 or value >= 179):
-				return false
-			if key in ["radius", "height", "near", "far", "size", "mass"] and value <= 0:
-				return false
-			if key in ["radial_segments", "rings"] and (value < 4 or value > 256):
-				return false
-			return true
-		if key in ["size", "scale"] and value is Vector3 and (value.x <= 0 or value.y <= 0 or value.z <= 0):
-			return false
-		return typeof(value) == info.type
+		if info.name == key:
+			return fits(info, key, value)
 	return false
+
+## Checks a decoded value against one property_list entry; an empty key skips the per-name range rules.
+static func fits(info: Dictionary, key: String, value: Variant) -> bool:
+	if info.type == TYPE_NIL: # Untyped Variant script variable.
+		return not value is Object or (value is Resource and value.get_script() == null)
+	if info.type == TYPE_STRING_NAME:
+		return value is String
+	if info.type == TYPE_OBJECT:
+		return value == null or (value is Resource and value.is_class(info.hint_string) and value.get_script() == null)
+	if info.type == TYPE_FLOAT or info.type == TYPE_INT:
+		if not (value is int or value is float) or not is_finite(float(value)):
+			return false
+		if info.type == TYPE_INT and float(value) != floor(float(value)):
+			return false
+		if absf(float(value)) > (4294967295.0 if info.type == TYPE_INT else 1000000000.0):
+			return false
+		if key == "fov" and (value <= 1 or value >= 179):
+			return false
+		if key in ["radius", "height", "near", "far", "size", "mass"] and value <= 0:
+			return false
+		if key in ["radial_segments", "rings"] and (value < 4 or value > 256):
+			return false
+		return true
+	if key in ["size", "scale"] and value is Vector3 and (value.x <= 0 or value.y <= 0 or value.z <= 0):
+		return false
+	return typeof(value) == info.type

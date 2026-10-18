@@ -30,6 +30,13 @@ Undo/redo accesses the public active-scene history. Godot cautions that direct
 history access can affect stability; operations are restricted to the active
 scene and rejected during commits. This history includes human editor changes.
 
+Scripts: the editor runs non-`@tool` scripts as placeholder instances (no setters,
+`_ready` or `_process`), so those nodes are editable and their exported variables
+are listed via `Script.get_script_property_list` (since
+placeholders omit `PROPERTY_USAGE_SCRIPT_VARIABLE`). `@tool` scripts really run
+and need the per-request `allow_tool_script` opt-in. Duplicate uses all
+`Node.DUPLICATE_*` flags (scripts, signals, groups, instancing).
+
 Paths are root-relative and change after renames/reparenting. String `instance_id`
 preserves 64-bit precision but is session-only, not a persistent GUID. Scene tree
 inspection is limited to 10,000 nodes; meshes include local/world AABBs.

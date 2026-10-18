@@ -79,8 +79,9 @@ Screenshots are returned as MCP image content and structured artifact metadata.
 | Managed game | Real running scene, bounded stdout/stderr, lifecycle and runtime PNG |
 | Editor play | Public play/stop/status APIs; no captured debugger log stream |
 
-Instances, inherited scenes and scripted nodes are read-only for mutations in
-this release. Preview images omit gameplay, animation, particles, skinning and
+Instances and inherited scenes are read-only for mutations in this release.
+Non-`@tool` scripted nodes are editable; `@tool` scripts need `allow_tool_script`.
+Preview images omit gameplay, animation, particles, skinning and
 the scene's WorldEnvironment. Editor camera transforms are readable; use preview
 viewpoints to control framing. See [architecture](docs/architecture.md) and [security](docs/security.md).
 

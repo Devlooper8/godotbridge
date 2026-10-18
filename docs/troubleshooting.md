@@ -22,9 +22,10 @@ execution-policy change is required.
 mutation's outcome is unknown; inspect the scene before retrying. Viewport PNG
 readback/encoding can briefly occupy the editor thread.
 
-**READ_ONLY_RESOURCE:** inherited scenes, instance branches and scripted nodes
-are protected. Open the source scene or edit through the normal editor. Arbitrary
-scripts/custom setters are not exposed through bridge properties.
+**READ_ONLY_RESOURCE:** inherited scenes, instance branches and `@tool` scripted
+nodes are protected. Open the source scene or edit through the normal editor;
+for a `@tool` node pass `allow_tool_script` if you accept that its script runs
+in the editor. Only exported script variables are exposed besides built-in properties.
 
 **FILE_ACCESS_DENIED on save:** a file changed on disk since it was opened or
 saved. Resolve/reload that change in Godot before saving. New scenes, save-as,

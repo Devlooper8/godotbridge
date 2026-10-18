@@ -69,8 +69,13 @@ godotctl node translate Object 1 0 0 [--world]
 `list` lists open editor tabs. `close` refuses unsaved scenes. Create/save-as
 refuse existing destinations. Save detects external changes since opening/saving.
 Root deletion/duplication, traversal and sibling collisions are rejected.
-Instance/inherited/scripted-node mutations are read-only in 0.1. Duplicate copies
-local hierarchy/properties but omits signal connections and group memberships.
+Instance/inherited-scene mutations are read-only in this release. Nodes with a
+non-`@tool` script are editable because the editor only holds a placeholder script
+instance (no setters or lifecycle code run); nodes with a `@tool` script are rejected
+with `READ_ONLY_RESOURCE` unless `--allow-tool-script` is passed. `node properties`
+and `node get` also expose exported script variables (marked `"script": true`) and
+`node set` validates their value against the declared type. Duplicate keeps scripts,
+persistent signal connections, groups and instancing.
 
 Node paths are root-relative; `.` is root. Absolute paths and `%UniqueName` paths
 are unsupported. Reparent preserves world transforms by default. Transforms are

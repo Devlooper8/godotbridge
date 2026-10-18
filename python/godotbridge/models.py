@@ -44,32 +44,43 @@ class SceneCreate(ScenePath):
     root: NodeType = "Node3D"
 
 
+class ToolScriptOptIn(Arguments):
+    allow_tool_script: bool = Field(
+        default=False,
+        description="Permit mutating nodes whose script is @tool; such scripts run inside the editor.",
+    )
+
+
 class NodePath(Arguments):
     path: str = Field(
         default=".", max_length=1024, description="Path relative to edited scene root; '.' is root"
     )
 
 
-class NodeCreate(Arguments):
+class NodeCreate(ToolScriptOptIn):
     type: NodeType = "Node3D"
     name: Name
     parent: str = "."
 
 
-class NodeRename(NodePath):
+class NodeMutation(NodePath, ToolScriptOptIn):
+    pass
+
+
+class NodeRename(NodeMutation):
     name: Name
 
 
-class NodeDuplicate(NodePath):
+class NodeDuplicate(NodeMutation):
     name: Name | None = None
 
 
-class NodeReparent(NodePath):
+class NodeReparent(NodeMutation):
     parent: str
     keep_global: bool = True
 
 
-class Transform(NodePath):
+class Transform(NodeMutation):
     position: Vector | None = None
     rotation: Vector | None = Field(
         default=None, description="Euler angles in degrees (Godot YXZ order)"
@@ -83,11 +94,11 @@ class Property(NodePath):
     property: str = Field(min_length=1, max_length=128)
 
 
-class SetProperty(Property):
+class SetProperty(Property, ToolScriptOptIn):
     value: JsonValue
 
 
-class Primitive(Arguments):
+class Primitive(ToolScriptOptIn):
     name: Name
     parent: str = "."
     kind: Literal["box", "sphere", "cylinder", "plane"] = "box"
@@ -103,7 +114,7 @@ class Primitive(Arguments):
     position: Vector = (0, 0, 0)
 
 
-class Light(Arguments):
+class Light(ToolScriptOptIn):
     name: Name = "Light"
     parent: str = "."
     type: Literal["directional", "omni", "spot"] = "directional"
@@ -113,7 +124,7 @@ class Light(Arguments):
     rotation: Vector = (-45, -30, 0)
 
 
-class Camera(Arguments):
+class Camera(ToolScriptOptIn):
     name: Name = "MainCamera"
     parent: str = "."
     position: Vector = (10, 8, 12)
@@ -189,21 +200,30 @@ OPERATIONS: dict[str, Operation] = {
         ScenePath, "Save the edited scene to a new path; refuse overwrites.", True
     ),
     "node.create": Operation(NodeCreate, "Add an owned node as one undoable editor action.", True),
-    "node.delete": Operation(NodePath, "Delete a non-root node; undo restores the subtree.", True),
+    "node.delete": Operation(
+        NodeMutation, "Delete a non-root node; undo restores the subtree.", True
+    ),
     "node.rename": Operation(
         NodeRename, "Rename a node without colliding with its siblings.", True
     ),
     "node.duplicate": Operation(
-        NodeDuplicate, "Duplicate a locally owned, script-free subtree.", True
+        NodeDuplicate,
+        "Duplicate a locally owned subtree, keeping scripts, signals, groups and instancing.",
+        True,
     ),
     "node.reparent": Operation(NodeReparent, "Move a node to another local parent.", True),
     "node.inspect": Operation(
         NodePath, "Read a node's class, transforms and resource information."
     ),
-    "node.properties": Operation(NodePath, "List supported typed properties and current values."),
+    "node.properties": Operation(
+        NodePath,
+        "List supported typed properties, including exported script variables, and current values.",
+    ),
     "node.get_property": Operation(Property, "Read a supported property."),
     "node.set_property": Operation(
-        SetProperty, "Set a typed, allowlisted property; undo restores it.", True
+        SetProperty,
+        "Set a typed, allowlisted property or exported script variable; undo restores it.",
+        True,
     ),
     "node.set_transform": Operation(
         Transform, "Set local/world 3D transforms using degrees, as one undoable action.", True
