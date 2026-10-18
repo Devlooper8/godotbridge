@@ -3,6 +3,7 @@ extends RefCounted
 
 const Wire = preload("transport_server.gd")
 const Codec = preload("codec.gd")
+const Scenes = preload("scene_manager.gd")
 var undo: EditorUndoRedoManager
 var root: Node
 var error := {}
@@ -20,28 +21,52 @@ func resolve(path: String) -> Node:
 		error = Wire.failure("NODE_NOT_FOUND", "Node does not exist: " + path)
 	return node
 
-func editable(node: Node, subtree: bool = false) -> bool:
+## mode: "edit" (properties/transform), "child" (add a child) or "structure" (delete, rename, reparent, duplicate).
+## The editor's own rules apply: a scene instance is one node owned by the edited root whose internals are
+## owned by the instance. Those internals are only editable through "editable children".
+func editable(node: Node, mode: String = "edit", subtree: bool = false) -> bool:
 	if not root.scene_file_path.is_empty():
 		var scene = ResourceLoader.load(root.scene_file_path, "PackedScene")
 		if scene is PackedScene and scene.get_state().get_base_scene_state() != null:
 			error = Wire.failure("READ_ONLY_RESOURCE", "Inherited scenes are read-only in this release; edit the base scene.")
 			return false
-	var ancestor := node
-	while ancestor and ancestor != root:
-		if ancestor.owner != root or not ancestor.scene_file_path.is_empty():
-			error = Wire.failure("READ_ONLY_RESOURCE", "Scene instances and unowned nodes are read-only; edit their source scene.")
+	if inside_instance(node):
+		var host := instance_host(node)
+		if mode == "structure":
+			error = Wire.failure("READ_ONLY_RESOURCE", "Nodes inside a scene instance cannot be deleted, renamed, reparented or duplicated; edit the source scene.")
 			return false
-		ancestor = ancestor.get_parent()
+		if host == null or node.owner != host:
+			error = Wire.failure("READ_ONLY_RESOURCE", "Unowned or nested-instance nodes are read-only; edit their source scene.")
+			return false
+		if not root.is_editable_instance(host):
+			error = Wire.failure("READ_ONLY_RESOURCE", "Node is inside a scene instance; enable editable children on '%s' first." % root.get_path_to(host))
+			return false
 	# Non-@tool scripts only exist as placeholder instances in the editor: no setters, _ready or
 	# _process run, so editing them is as safe as editing a built-in node.
 	if is_tool_script(node) and not allow_tool:
 		error = Wire.failure("READ_ONLY_RESOURCE", "Node has a @tool script that runs inside the editor; pass allow_tool_script to mutate it anyway.")
 		return false
 	if subtree:
+		# Instance internals (owned by the instance) are not part of this scene's subtree.
 		for child in node.get_children():
-			if not editable(child, true):
+			if child.owner == root and not editable(child, "edit", true):
 				return false
 	return true
+
+func inside_instance(node: Node) -> bool:
+	return node != root and node.owner != root
+
+## Nearest ancestor that is an instance root of the edited scene, or null.
+func instance_host(node: Node) -> Node:
+	var ancestor := node.get_parent()
+	while ancestor and ancestor != root:
+		if ancestor.owner == root and not ancestor.scene_file_path.is_empty():
+			return ancestor
+		ancestor = ancestor.get_parent()
+	return null
+
+func is_instance_root(node: Node) -> bool:
+	return node != root and node.owner == root and not node.scene_file_path.is_empty()
 
 static func is_tool_script(node: Node) -> bool:
 	var script: Script = node.get_script()
@@ -78,7 +103,9 @@ func describe(node: Node) -> Dictionary:
 		"class": node.get_class(), "instance_id": str(node.get_instance_id()),
 		"scene_file_path": node.scene_file_path, "selected": node in EditorInterface.get_selection().get_selected_nodes(),
 		"script": node.get_script().resource_path if node.get_script() else null, "tool_script": is_tool_script(node),
-		"groups": node.get_groups().filter(func(group): return not String(group).begins_with("_"))}
+		"groups": node.get_groups().filter(func(group): return not String(group).begins_with("_")),
+		"instance": {"is_instance_root": is_instance_root(node), "editable_children": is_instance_root(node) and root.is_editable_instance(node),
+			"inside_instance": inside_instance(node)}}
 	if node is Node3D:
 		result.merge({"position": Codec.encode(node.position), "rotation_degrees": Codec.encode(node.rotation_degrees),
 			"scale": Codec.encode(node.scale), "local_transform": Codec.encode(node.transform),
@@ -130,11 +157,13 @@ func handle(method: String, params: Dictionary) -> Dictionary:
 		return success({"changed": changed})
 	if method == "node.create":
 		var parent := resolve(params.get("parent", "."))
-		if parent == null or not editable(parent) or not valid_name(parent, params.name):
+		if parent == null or not editable(parent, "child") or not valid_name(parent, params.name):
 			return error
 		var node: Node = ClassDB.instantiate(params.get("type", "Node3D"))
 		node.name = params.name
 		return add_node(parent, node)
+	if method == "node.instantiate":
+		return instantiate(params)
 	var node := resolve(params.get("path", "."))
 	if node == null:
 		return error
@@ -160,7 +189,8 @@ func handle(method: String, params: Dictionary) -> Dictionary:
 			if info.name == params.property:
 				return success({"value": info.value})
 		return Wire.failure("UNSUPPORTED_PROPERTY", "Property is not exposed for this node.")
-	if not editable(node, method in ["node.delete", "node.duplicate", "node.reparent"]):
+	var structural := method in ["node.delete", "node.duplicate", "node.reparent", "node.rename"]
+	if not editable(node, "structure" if structural else "edit", method in ["node.delete", "node.duplicate", "node.reparent"]):
 		return error
 	match method:
 		"node.delete":
@@ -196,9 +226,18 @@ func handle(method: String, params: Dictionary) -> Dictionary:
 			return set_properties(node, {params.property: value.value if info.is_empty() else Codec.coerce(info, value.value)})
 		"node.set_transform":
 			return set_transform(node, params)
+		"node.set_editable_children":
+			if not is_instance_root(node):
+				return Wire.failure("INVALID_ARGUMENT", "Editable children apply to scene instance roots only.")
+			var was_editable := root.is_editable_instance(node)
+			undo.create_action("GodotBridge: editable children " + String(node.name), 0, root)
+			undo.add_do_method(root, "set_editable_instance", node, params.editable)
+			undo.add_undo_method(root, "set_editable_instance", node, was_editable)
+			undo.commit_action()
+			return success(describe(node))
 		"node.reparent":
 			var parent := resolve(params.parent)
-			if parent == null or not editable(parent):
+			if parent == null or not editable(parent, "child"):
 				return error
 			if node == root or node == parent or node.is_ancestor_of(parent):
 				return Wire.failure("INVALID_ARGUMENT", "Reparent would move the root or create a cycle.")
@@ -220,6 +259,62 @@ func handle(method: String, params: Dictionary) -> Dictionary:
 			undo.commit_action()
 			return success(describe(node))
 	return Wire.failure("UNSUPPORTED_OPERATION", "Unknown node operation.")
+
+func instantiate(params: Dictionary) -> Dictionary:
+	var parent := resolve(params.get("parent", "."))
+	if parent == null or not editable(parent, "child"):
+		return error
+	var path: String = params.scene
+	if not Scenes.safe_path(path):
+		return Wire.failure("FILE_ACCESS_DENIED", "Use a res:// .tscn path without traversal or symlinks.")
+	if not FileAccess.file_exists(path):
+		return Wire.failure("SCENE_NOT_FOUND", "Scene file does not exist: " + path)
+	var closure := dependency_closure(path)
+	if path == root.scene_file_path or root.scene_file_path in closure:
+		return Wire.failure("INVALID_ARGUMENT", "A scene cannot be instanced into itself, directly or through another scene.")
+	if not allow_tool:
+		for dependency in closure:
+			if dependency.get_extension() in ["gd", "cs"]:
+				var script = ResourceLoader.load(dependency)
+				if script is Script and script.is_tool():
+					return Wire.failure("READ_ONLY_RESOURCE", "The scene uses a @tool script that would run in the editor; pass allow_tool_script to instance it anyway.")
+	var packed = ResourceLoader.load(path, "PackedScene")
+	if not packed is PackedScene or not packed.can_instantiate():
+		return Wire.failure("SCENE_NOT_FOUND", "File is not an instantiable PackedScene.")
+	var node: Node = packed.instantiate(PackedScene.GEN_EDIT_STATE_INSTANCE)
+	if node == null:
+		return Wire.failure("INTERNAL_ERROR", "Scene instantiation failed.")
+	if params.get("name") != null:
+		node.name = params.name
+		if not valid_name(parent, params.name):
+			node.free()
+			return error
+	else:
+		var base := String(node.name)
+		var index := 2
+		while parent.has_node(NodePath(String(node.name))):
+			node.name = base + str(index)
+			index += 1
+	return add_node(parent, node)
+
+## Every res:// file reachable through ResourceLoader dependencies, including the start path.
+static func dependency_closure(start: String) -> Array:
+	var seen := {start: true}
+	var pending := [start]
+	while not pending.is_empty() and seen.size() < 512:
+		var current: String = pending.pop_back()
+		if not current.get_extension() in ["tscn", "scn", "tres", "res"]:
+			continue
+		for entry in ResourceLoader.get_dependencies(current):
+			var parts: PackedStringArray = entry.split("::")
+			var dependency: String = parts[parts.size() - 1]
+			if (dependency.is_empty() or dependency.begins_with("uid://")) and parts[0].begins_with("uid://"):
+				var id := ResourceUID.text_to_id(parts[0])
+				dependency = ResourceUID.get_id_path(id) if ResourceUID.has_id(id) else ""
+			if not dependency.is_empty() and not seen.has(dependency):
+				seen[dependency] = true
+				pending.append(dependency)
+	return seen.keys()
 
 func add_node(parent: Node, node: Node) -> Dictionary:
 	undo.create_action("GodotBridge: create " + String(node.name), 0, root)
@@ -269,10 +364,14 @@ func _attach(parent: Node, node: Node, scene_root: Node, index: int) -> void:
 	if index >= 0:
 		parent.move_child(node, mini(index, parent.get_child_count() - 1))
 
+## Adopts a new or re-attached subtree. Nodes owned by something else are a scene instance's internals and
+## must stay out of this scene's file; children of an instance root count as new only if owned by the root.
 func _own(node: Node, scene_root: Node) -> void:
 	node.owner = scene_root
+	var instance := not node.scene_file_path.is_empty()
 	for child in node.get_children():
-		_own(child, scene_root)
+		if child.owner == scene_root or (child.owner == null and not instance):
+			_own(child, scene_root)
 
 func _move(node: Node, parent: Node, scene_root: Node, index: int, transform: Transform3D) -> void:
 	node.get_parent().remove_child(node)

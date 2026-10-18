@@ -1,5 +1,5 @@
 import pytest
-from godotbridge.errors import BridgeError
+from helpers import read, rejected, write
 
 pytestmark = pytest.mark.engine
 
@@ -32,13 +32,6 @@ script = ExtResource("2")
 """
 
 
-def write(editor, relative, text):
-    file = editor.config.project / relative
-    file.parent.mkdir(parents=True, exist_ok=True)
-    file.write_text(text, encoding="utf-8", newline="\n")
-    return file
-
-
 @pytest.fixture
 def scripted(editor, request):
     write(editor, "scripts/plain.gd", PLAIN)
@@ -48,12 +41,6 @@ def scripted(editor, request):
     write(editor, f"scenes/{name}.tscn", SCENE)
     editor.call("scene.open", path=f"res://scenes/{name}.tscn")
     return editor
-
-
-def rejected(editor, method, code, **params):
-    with pytest.raises(BridgeError) as caught:
-        editor.call(method, **params)
-    assert caught.value.code == code, caught.value
 
 
 def value(editor, path, property):
@@ -173,9 +160,7 @@ def test_duplicate_keeps_script_and_groups(scripted):
     scripted.call("node.set_property", path="PlainCopy", property="health", value=11)
     assert value(scripted, "Plain", "health") == 7
     scripted.call("scene.save")
-    text = (
-        scripted.config.project / "scenes/test_duplicate_keeps_script_and_groups.tscn"
-    ).read_text(encoding="utf-8")
+    text = read(scripted, "scenes/test_duplicate_keeps_script_and_groups.tscn")
     block = text[text.index('name="PlainCopy"') :]
     assert 'groups=["enemies"]' in block.splitlines()[0]
     assert "script = ExtResource" in block

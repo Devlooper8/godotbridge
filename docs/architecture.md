@@ -37,6 +37,14 @@ placeholders omit `PROPERTY_USAGE_SCRIPT_VARIABLE`). `@tool` scripts really run
 and need the per-request `allow_tool_script` opt-in. Duplicate uses all
 `Node.DUPLICATE_*` flags (scripts, signals, groups, instancing).
 
+Instances: a scene instance is one node owned by the edited root; its internals
+are owned by the instance root and `_own` never adopts them, so saved scenes
+contain only the instance entry plus overrides. `node.instantiate` uses
+`PackedScene.GEN_EDIT_STATE_INSTANCE` with an undoable attach, rejecting self or
+transitive recursion via `ResourceLoader.get_dependencies`. Property edits inside
+an instance require `Node.is_editable_instance` on the owning instance root.
+Nested-instance internals stay read-only.
+
 Paths are root-relative and change after renames/reparenting. String `instance_id`
 preserves 64-bit precision but is session-only, not a persistent GUID. Scene tree
 inspection is limited to 10,000 nodes; meshes include local/world AABBs.

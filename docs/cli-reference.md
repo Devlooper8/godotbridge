@@ -51,6 +51,8 @@ godotctl scene save
 godotctl scene save-as res://scenes/copy.tscn
 godotctl scene close
 godotctl node add --type Node3D --name Object --parent .
+godotctl node instantiate res://scenes/unit.tscn [--parent .] [--name Hero]
+godotctl node editable-children Hero [--disable]
 godotctl node remove Object
 godotctl node duplicate Object [--name Copy]
 godotctl node rename Object NewName
@@ -69,7 +71,15 @@ godotctl node translate Object 1 0 0 [--world]
 `list` lists open editor tabs. `close` refuses unsaved scenes. Create/save-as
 refuse existing destinations. Save detects external changes since opening/saving.
 Root deletion/duplication, traversal and sibling collisions are rejected.
-Instance/inherited-scene mutations are read-only in this release. Nodes with a
+Inherited-scene mutations are read-only in this release. Scene instances follow
+the editor: the instance root accepts property/transform edits, rename, delete,
+reparent and duplicate; its internal nodes are read-only for delete/rename/
+reparent/duplicate, and accept property/transform edits and new children only
+after `node editable-children` (shown as `instance.editable_children`).
+`node instantiate` instances a saved scene (undoable); it rejects self or
+recursive instancing and scenes with `@tool` scripts unless `--allow-tool-script`.
+Only the instance root is owned by the edited scene, so saves never bake the
+instance's internals. Nodes with a
 non-`@tool` script are editable because the editor only holds a placeholder script
 instance (no setters or lifecycle code run); nodes with a `@tool` script are rejected
 with `READ_ONLY_RESOURCE` unless `--allow-tool-script` is passed. `node properties`

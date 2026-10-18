@@ -75,6 +75,20 @@ class NodeDuplicate(NodeMutation):
     name: Name | None = None
 
 
+class NodeInstantiate(ToolScriptOptIn):
+    scene: str = Field(
+        max_length=1024, description="Project-relative res:// path to the saved .tscn to instance"
+    )
+    parent: str = "."
+    name: Name | None = Field(default=None, description="Defaults to the scene root's name")
+
+
+class SetEditableChildren(NodeMutation):
+    editable: bool = Field(
+        default=True, description="Allow editing the instance's internal nodes in this scene"
+    )
+
+
 class NodeReparent(NodeMutation):
     parent: str
     keep_global: bool = True
@@ -209,6 +223,16 @@ OPERATIONS: dict[str, Operation] = {
     "node.duplicate": Operation(
         NodeDuplicate,
         "Duplicate a locally owned subtree, keeping scripts, signals, groups and instancing.",
+        True,
+    ),
+    "node.instantiate": Operation(
+        NodeInstantiate,
+        "Instance a saved scene under a parent as one undoable action; its internals stay in the source scene.",
+        True,
+    ),
+    "node.set_editable_children": Operation(
+        SetEditableChildren,
+        "Toggle editable children on a scene instance root so its internals accept property overrides.",
         True,
     ),
     "node.reparent": Operation(NodeReparent, "Move a node to another local parent.", True),

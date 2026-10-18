@@ -31,7 +31,7 @@ Names generally map from protocol methods by replacing `.` with `_` and adding
 | --- | --- |
 | Project | `godot_project_info`, `godot_project_open`, `godot_project_import`, `godot_project_validate`, `godot_project_check_script` |
 | Scenes | `godot_scene_list`, `godot_scene_current`, `godot_scene_open`, `godot_scene_create`, `godot_scene_tree`, `godot_scene_save`, `godot_scene_save_as`, `godot_scene_close`, `godot_scene_snapshot` |
-| Nodes | `godot_node_create`, `godot_node_delete`, `godot_node_duplicate`, `godot_node_rename`, `godot_node_reparent`, `godot_node_inspect`, `godot_node_properties`, `godot_node_get_property`, `godot_node_set_property`, `godot_node_set_transform` |
+| Nodes | `godot_node_create`, `godot_node_delete`, `godot_node_duplicate`, `godot_node_rename`, `godot_node_reparent`, `godot_node_instantiate`, `godot_node_set_editable_children`, `godot_node_inspect`, `godot_node_properties`, `godot_node_get_property`, `godot_node_set_property`, `godot_node_set_transform` |
 | Editor | `godot_editor_status`, `godot_editor_select`, `godot_editor_focus`, `godot_editor_undo`, `godot_editor_redo`, `godot_editor_camera_info`, `godot_editor_diagnostics` |
 | 3D | `godot_create_primitive`, `godot_create_light`, `godot_create_camera` |
 | Images | `godot_viewport_capture` |

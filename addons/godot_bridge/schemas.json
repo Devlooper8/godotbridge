@@ -243,6 +243,74 @@
     "title": "NodeDuplicate",
     "type": "object"
   },
+  "node.instantiate": {
+    "additionalProperties": false,
+    "properties": {
+      "allow_tool_script": {
+        "default": false,
+        "description": "Permit mutating nodes whose script is @tool; such scripts run inside the editor.",
+        "title": "Allow Tool Script",
+        "type": "boolean"
+      },
+      "scene": {
+        "description": "Project-relative res:// path to the saved .tscn to instance",
+        "maxLength": 1024,
+        "title": "Scene",
+        "type": "string"
+      },
+      "parent": {
+        "default": ".",
+        "title": "Parent",
+        "type": "string"
+      },
+      "name": {
+        "anyOf": [
+          {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Defaults to the scene root's name",
+        "title": "Name"
+      }
+    },
+    "required": [
+      "scene"
+    ],
+    "title": "NodeInstantiate",
+    "type": "object"
+  },
+  "node.set_editable_children": {
+    "additionalProperties": false,
+    "properties": {
+      "allow_tool_script": {
+        "default": false,
+        "description": "Permit mutating nodes whose script is @tool; such scripts run inside the editor.",
+        "title": "Allow Tool Script",
+        "type": "boolean"
+      },
+      "path": {
+        "default": ".",
+        "description": "Path relative to edited scene root; '.' is root",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      },
+      "editable": {
+        "default": true,
+        "description": "Allow editing the instance's internal nodes in this scene",
+        "title": "Editable",
+        "type": "boolean"
+      }
+    },
+    "title": "SetEditableChildren",
+    "type": "object"
+  },
   "node.reparent": {
     "additionalProperties": false,
     "properties": {

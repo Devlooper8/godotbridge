@@ -10,7 +10,7 @@ static func handle(method: String, params: Dictionary, nodes: RefCounted) -> Dic
 		return Wire.failure("SCENE_NOT_OPEN", "Open or create a scene first.")
 	nodes.allow_tool = params.get("allow_tool_script", false)
 	var parent: Node = nodes.resolve(params.parent)
-	if parent == null or not nodes.editable(parent) or not nodes.valid_name(parent, params.name):
+	if parent == null or not nodes.editable(parent, "child") or not nodes.valid_name(parent, params.name):
 		return nodes.error
 	var node: Node3D
 	if method == "3d.create_primitive":

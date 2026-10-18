@@ -91,10 +91,13 @@ def test_instance_and_inherited_boundaries(editor):
     from godotbridge.errors import BridgeError
 
     editor.call("scene.open", path="res://scenes/instance-parent.tscn")
-    for path in ("Instance", "Instance/Child"):
-        with pytest.raises(BridgeError) as error:
-            editor.call("node.delete", path=path)
-        assert error.value.code == "READ_ONLY_RESOURCE"
+    with pytest.raises(BridgeError) as error:
+        editor.call("node.delete", path="Instance/Child")
+    assert error.value.code == "READ_ONLY_RESOURCE"
+    # The instance root itself is an ordinary editable node of this scene.
+    editor.call("node.delete", path="Instance")
+    editor.call("editor.undo")
+    editor.call("node.inspect", path="Instance/Child")
     editor.call("scene.open", path="res://scenes/inherited.tscn")
     with pytest.raises(BridgeError) as error:
         editor.call("node.create", name="Restricted")

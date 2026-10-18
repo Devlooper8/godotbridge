@@ -30,6 +30,37 @@ def add(
 
 
 @app.command()
+def instantiate(
+    scene: str,
+    parent: str = ".",
+    name: str | None = None,
+    json_output: bool = typer.Option(False, "--json"),
+    allow_tool_script: bool = typer.Option(
+        False, help="Allow instancing scenes with @tool scripts or into @tool parents."
+    ),
+):
+    """Instance a saved res:// scene under PARENT as one undo action."""
+    perform(
+        "node.instantiate",
+        json_output,
+        scene=scene,
+        parent=parent,
+        name=name,
+        allow_tool_script=allow_tool_script,
+    )
+
+
+@app.command("editable-children")
+def editable_children(
+    path: str,
+    disable: bool = typer.Option(False, "--disable", help="Turn editable children off."),
+    json_output: bool = typer.Option(False, "--json"),
+):
+    """Let a scene instance's internal nodes accept property overrides in this scene."""
+    perform("node.set_editable_children", json_output, path=path, editable=not disable)
+
+
+@app.command()
 def remove(
     path: str,
     json_output: bool = typer.Option(False, "--json"),

@@ -41,7 +41,8 @@ scene `_init` smoke tests and runtime play. Validation and game execution are
 for trusted projects. Geometry previews avoid instantiating scene scripts, but
 render existing assets/shaders in the trusted editor process.
 
-Inherited scenes and scene instance branches are read-only for bridge mutations.
+Inherited scenes are read-only for bridge mutations. Scene instances follow the
+editor: only the instance root is editable unless editable children is enabled.
 Nodes with non-`@tool` scripts are editable (the editor only runs placeholder
 instances for them); `@tool` script nodes require the explicit `allow_tool_script`
 opt-in. This policy avoids ambiguous ownership. It can be relaxed only with explicit engine tests for each new behavior.
