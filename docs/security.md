@@ -31,6 +31,10 @@ compromised process running as the same OS user.
   during offline imports: its presence cannot reliably be detected by this release.
 - The CLI never kills a PID loaded from disk. A supervisor stops only the Popen
   child it launched. Process commands use argument arrays and `shell=False`.
+- The `GodotBridgeRuntime` autoload (added to the project's `project.godot` by the
+  plugin) runs inside the played game only when a debugger is attached; it opens no
+  socket and only sends log entries over Godot's own editor debugger connection. It
+  is inert in exports and managed runs.
 - MCP is stdio-only. No arbitrary GDScript, generic method invocation, shell
   execution, or unrestricted filesystem tool is exposed.
 

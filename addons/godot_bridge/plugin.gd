@@ -4,15 +4,38 @@ extends EditorPlugin
 const Transport = preload("transport_server.gd")
 const Dispatcher = preload("command_dispatcher.gd")
 const Dock = preload("dock/bridge_dock.gd")
+const DebuggerBridge = preload("debugger_plugin.gd")
+const AUTOLOAD_NAME := "GodotBridgeRuntime"
+const AUTOLOAD_PATH := "res://addons/godot_bridge/runtime/bridge_runtime.gd"
 var transport: RefCounted
 var dispatcher: RefCounted
 var dock: VBoxContainer
+var debugger: EditorDebuggerPlugin
 var last_command := ""
 var last_error := ""
 var busy := false
 var recent_errors: Array[Dictionary] = []
 
+## Enabling registers the game-side autoload; _enter_tree covers installs enabled before it existed.
+func _enable_plugin() -> void:
+	_register_autoload()
+
+func _disable_plugin() -> void:
+	if ProjectSettings.has_setting("autoload/" + AUTOLOAD_NAME):
+		remove_autoload_singleton(AUTOLOAD_NAME)
+
+func _register_autoload() -> void:
+	# Deferred from _enter_tree: the autoload settings are not ready yet at that point and the call is silently lost.
+	# Leave project.godot untouched when the entry is already there.
+	if not ProjectSettings.has_setting("autoload/" + AUTOLOAD_NAME):
+		add_autoload_singleton(AUTOLOAD_NAME, AUTOLOAD_PATH)
+		# The editor only persists this when it closes cleanly; a crash or kill would lose it.
+		ProjectSettings.save()
+
 func _enter_tree() -> void:
+	_register_autoload.call_deferred()
+	debugger = DebuggerBridge.new()
+	add_debugger_plugin(debugger)
 	transport = Transport.new()
 	dispatcher = Dispatcher.new(self)
 	dock = Dock.new()
@@ -29,6 +52,9 @@ func _exit_tree() -> void:
 		remove_control_from_docks(dock)
 		dock.queue_free()
 	dispatcher = null
+	if debugger:
+		remove_debugger_plugin(debugger)
+		debugger = null
 
 func _toggle(enabled: bool) -> void:
 	if enabled:

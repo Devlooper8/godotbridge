@@ -39,6 +39,8 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 	if method.begins_with("game."):
 		if params.get("mode") != "editor":
 			return Transport.failure("UNSUPPORTED_OPERATION", "Managed games are controlled by the Python client.")
+		if method == "game.logs":
+			return plugin.debugger.logs(params)
 		if method == "game.stop":
 			EditorInterface.stop_playing_scene()
 		elif method == "game.run":

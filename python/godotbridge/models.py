@@ -182,6 +182,15 @@ class GameMode(Arguments):
     mode: Literal["managed", "editor"] = "managed"
 
 
+class GameLogs(GameMode):
+    since: int | None = Field(
+        default=None,
+        ge=0,
+        description="Editor mode: return entries after this cursor (the previous result's next).",
+    )
+    limit: int = Field(default=1000, ge=1, le=5000, description="Editor mode: maximum entries")
+
+
 class GameCapture(Arguments):
     output: str = "game.png"
 
@@ -317,9 +326,9 @@ OPERATIONS: dict[str, Operation] = {
     ),
     "game.status": Operation(GameMode, "Read managed process state or editor play status."),
     "game.logs": Operation(
-        GameMode,
-        "Read bounded stdout/stderr for a bridge-managed game; editor debugger logs are not exposed.",
-        backend="client",
+        GameLogs,
+        "Managed mode: bounded stdout/stderr of the bridge-managed game. Editor mode: debugger log "
+        "entries (print, warnings, errors) of the editor-played game, read with a since cursor.",
     ),
     "game.screenshot": Operation(
         GameCapture,

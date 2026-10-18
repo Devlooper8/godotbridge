@@ -39,8 +39,16 @@ def status(mode: str = "managed", json_output: bool = typer.Option(False, "--jso
 
 
 @app.command()
-def logs(mode: str = "managed", json_output: bool = typer.Option(False, "--json")):
-    perform("game.logs", json_output, mode=mode)
+def logs(
+    mode: str = "managed",
+    since: int | None = typer.Option(
+        None, help="Editor mode: only entries after this cursor (the previous result's next)."
+    ),
+    limit: int = 1000,
+    json_output: bool = typer.Option(False, "--json"),
+):
+    """Managed: captured stdout/stderr. Editor: debugger log entries of the played game."""
+    perform("game.logs", json_output, mode=mode, since=since, limit=limit)
 
 
 @app.command()

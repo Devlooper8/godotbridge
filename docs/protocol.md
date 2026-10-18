@@ -107,6 +107,18 @@ paths are metadata, not permission to load arbitrary resources. Assignments
 replace the node's resource; they do not edit shared external resources in place.
 `node.properties` reports the allowlisted properties available on that node.
 
+## Editor-play logs
+
+`game.logs` with `mode: "editor"` reads the debugger log ring kept by the plugin:
+params `since` (cursor, optional) and `limit` (1-5000, default 1000). The result has
+`entries` (each with `seq`, `run`, `session`, `kind` of `log`/`run_started`/`run_stopped`,
+`level`, `message`, `time` and for engine errors/warnings `file`, `line`, `function`,
+`code`), `next` (cursor for the following call), `missed` (entries evicted before
+being read), `dropped` (entries the game discarded under backpressure), `running`,
+`run` and `epoch`. Sequence numbers increase for one plugin session; a changed `epoch`
+means the cursor space restarted. `file`/`line` are the innermost GDScript frame when
+available, with the engine's C++ origin in `native_file`/`native_line`.
+
 ## Error code vocabulary
 
 EDITOR_DISCONNECTED, AUTHENTICATION_FAILED, PROTOCOL_MISMATCH, INVALID_ARGUMENT,

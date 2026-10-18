@@ -1155,5 +1155,43 @@
     },
     "title": "GameMode",
     "type": "object"
+  },
+  "game.logs": {
+    "additionalProperties": false,
+    "properties": {
+      "mode": {
+        "default": "managed",
+        "enum": [
+          "managed",
+          "editor"
+        ],
+        "title": "Mode",
+        "type": "string"
+      },
+      "since": {
+        "anyOf": [
+          {
+            "minimum": 0,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Editor mode: return entries after this cursor (the previous result's next).",
+        "title": "Since"
+      },
+      "limit": {
+        "default": 1000,
+        "description": "Editor mode: maximum entries",
+        "maximum": 5000,
+        "minimum": 1,
+        "title": "Limit",
+        "type": "integer"
+      }
+    },
+    "title": "GameLogs",
+    "type": "object"
   }
 }

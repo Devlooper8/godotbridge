@@ -146,6 +146,7 @@ destinations; no overwrite flag is provided. CLI JSON never embeds image base64.
 godotctl game run [--scene res://scenes/main.tscn | --current] [--headless] [--max-seconds 60]
 godotctl game status
 godotctl game logs
+godotctl game logs --mode editor [--since CURSOR] [--limit 1000]
 godotctl game screenshot --output game.png
 godotctl game stop
 godotctl game run --mode editor [--current]
@@ -156,5 +157,18 @@ godotctl game stop --mode editor
 Managed mode is default: one supervised process per project, with a one-hour
 default deadline. Main or explicit scene runs work offline; `--current` requires
 the live plugin. Runs use saved files. Runtime capture uses native viewport
-dimensions and requires graphical managed mode. Editor mode has no captured
-stdout or runtime screenshot and uses Godot's normal play configuration.
+dimensions and requires graphical managed mode. Editor mode has no runtime
+screenshot and uses Godot's normal play configuration.
+
+`game logs` means two different things. Managed mode returns the supervised
+process's bounded stdout/stderr text. `--mode editor` returns structured entries
+from Godot's debugger channel for a game started with `game run --mode editor`
+(or the editor's Play button): `seq`, `run`, `kind` (`log`, `run_started`,
+`run_stopped`), `level` (`info`, `warning`, `error`, `stderr`), `message`,
+`time` and, for errors and warnings, `file`, `line`, `function`, `code`. Pass the
+previous result's `next` as `--since` to read only newer entries. `missed` counts
+entries evicted from the editor's 5,000-entry ring before they were read,
+`dropped` counts entries the game itself discarded (its queue overflowed), and
+`epoch` changes if the plugin restarts (cursors then restart from 1). The stream
+is produced by the bridge's `GodotBridgeRuntime` autoload (see
+[architecture](architecture.md)); it needs the plugin enabled when the game starts.

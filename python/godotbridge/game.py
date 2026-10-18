@@ -10,12 +10,11 @@ def dispatch(client, operation: str, arguments: dict[str, Any]) -> dict:
     if operation == "game.screenshot":
         return process_manager.screenshot(client, arguments["output"])
     if arguments.get("mode") == "editor":
-        if operation == "game.logs":
-            raise BridgeError(
-                "UNSUPPORTED_OPERATION",
-                "Editor-managed debugger logs are not exposed. Use --mode managed for captured stdout/stderr.",
-            )
         return client.transport.request(operation, arguments)
+    if operation == "game.logs" and arguments.get("since") is not None:
+        raise BridgeError(
+            "INVALID_ARGUMENT", "since applies to editor-mode debugger logs, not managed stdout."
+        )
     if operation == "game.status":
         return process_manager.status(client.config)
     if operation == "game.logs":

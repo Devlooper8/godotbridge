@@ -57,8 +57,13 @@ that its game has ended before removing `.godot/godotbridge/game/run.lock`.
 No stored PID is killed automatically. A captured runtime request may leave a
 `capture.lock` after a crashed client; remove it only after that client has exited.
 
-**No editor game logs:** `game logs --mode editor` returns UNSUPPORTED_OPERATION.
-Use managed mode for combined stdout/stderr, or the editor's normal debugger.
+**No editor game logs:** `game logs --mode editor` only sees games started while the
+plugin was enabled and the `GodotBridgeRuntime` autoload existed (check
+Project Settings > Globals > Autoload; the plugin re-adds it when it loads). The
+autoload is inert in exported builds and managed runs. A game that already
+crashed before its first frame sends nothing; read the editor's Output panel or
+use managed mode (`game logs`, stdout/stderr) instead. If the cursor stops
+advancing after an editor restart, compare `epoch` and restart from no `since`.
 
 **Tests:** run `python scripts/run_integration_tests.py --graphical`. Artifacts and
 editor logs stay in `.artifacts/`. Tests without `--engine` skip engine integration

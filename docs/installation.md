@@ -68,7 +68,11 @@ godotctl --project /work/game project open
 
 Enable **GodotBridge** in **Project → Project Settings → Plugins**. The demo
 already enables it. Upgrades require explicit `--replace`; commit local plugin
-changes first. The installer does not rewrite project.godot.
+changes first. The installer does not rewrite project.godot; the plugin itself
+adds an autoload named `GodotBridgeRuntime` (for editor-play log streaming) to
+`project.godot` when it is enabled or loads without one, and removes it when disabled.
+It is inert in exported games and managed runs. Commit or remove that entry as you
+would any other project setting.
 
 Manual installation: copy `addons/godot_bridge`, including `schemas.json`, into
 the project. Startup binds an ephemeral `127.0.0.1` port, generates a random token,

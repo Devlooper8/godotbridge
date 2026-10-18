@@ -93,8 +93,29 @@ custom main loops require editor play mode. Managed `user://` data/settings are
 isolated under `.godot/godotbridge/worker-user`, separate from normal player saves.
 The runner adds no scene or export dependency.
 
-Editor play uses public play/stop APIs. Full debugger introspection, breakpoints,
-remote live-node access and editor log streaming are future work.
+Editor play uses public play/stop APIs.
+
+## Editor-play debugger integration
+
+Two cooperating parts use Godot's supported debugger message channel (prefix
+`godotbridge`):
+
+- `runtime/bridge_runtime.gd` is an autoload (`GodotBridgeRuntime`) that the plugin
+  registers in `project.godot` on enable, and re-adds on load if it is missing
+  (installs enabled before it existed). It is inert when `Engine.is_editor_hint()`
+  or `EngineDebugger.is_active()` is false, which covers exported builds and
+  bridge-managed runs (it loads there but does nothing). When active it installs an
+  `OS.add_logger` Logger that only queues entries under a mutex (logger callbacks may
+  come from any thread and must not log themselves; the queue holds 2,000 entries,
+  oldest dropped and counted) and flushes up to 200 per frame from the main thread with
+  `EngineDebugger.send_message("godotbridge:log", ...)`.
+- `debugger_plugin.gd` is an `EditorDebuggerPlugin` added with `add_debugger_plugin`.
+  It captures `godotbridge:*` messages into a 5,000-entry ring with monotonically
+  increasing sequence numbers and inserts `run_started`/`run_stopped` entries from the
+  session signals so clients can separate runs.
+
+This is distinct from managed-runtime stdout capture, which reads the supervised
+process's pipes and needs no debugger.
 
 ## Version-matched references
 

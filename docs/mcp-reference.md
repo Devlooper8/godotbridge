@@ -37,6 +37,10 @@ Names generally map from protocol methods by replacing `.` with `_` and adding
 | Images | `godot_viewport_capture` |
 | Game | `godot_game_run`, `godot_game_stop`, `godot_game_status`, `godot_game_logs`, `godot_game_screenshot` |
 
+`godot_game_logs` with `mode: "managed"` returns the supervised process's stdout/stderr
+text; with `mode: "editor"` it returns structured debugger entries for the editor-played
+game and accepts `since` (previous `next`) and `limit`.
+
 Every tool has a description, explicit JSON input schema, and read-only/mutating
 annotations. Read-only annotations mean no scene mutation; capture tools still
 create image artifacts. Project validation can execute trusted scene `_init`
