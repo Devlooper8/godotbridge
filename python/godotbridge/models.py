@@ -191,6 +191,17 @@ class GameLogs(GameMode):
     limit: int = Field(default=1000, ge=1, le=5000, description="Editor mode: maximum entries")
 
 
+class RuntimeTree(Arguments):
+    path: str = Field(
+        default=".", max_length=1024, description="Subtree root relative to the running scene root"
+    )
+    max_nodes: int = Field(default=1000, ge=1, le=5000)
+
+
+class RuntimeSetProperty(Property):
+    value: JsonValue
+
+
 class GameCapture(Arguments):
     output: str = "game.png"
 
@@ -329,6 +340,26 @@ OPERATIONS: dict[str, Operation] = {
         GameLogs,
         "Managed mode: bounded stdout/stderr of the bridge-managed game. Editor mode: debugger log "
         "entries (print, warnings, errors) of the editor-played game, read with a since cursor.",
+    ),
+    "debug.status": Operation(
+        Empty,
+        "Read whether an editor-played game is running and stopped at a breakpoint, plus the debug adapter port.",
+    ),
+    "runtime.tree": Operation(
+        RuntimeTree,
+        "Read the live node tree of the editor-played game (bounded; transforms for Node3D).",
+    ),
+    "runtime.inspect": Operation(NodePath, "Read one live node of the editor-played game."),
+    "runtime.properties": Operation(
+        NodePath, "List supported typed properties and exported script variables of a live node."
+    ),
+    "runtime.get_property": Operation(
+        Property, "Read a supported property of a live node of the editor-played game."
+    ),
+    "runtime.set_property": Operation(
+        RuntimeSetProperty,
+        "Set an allowlisted property or exported script variable on a live node. Runtime only: never saved to the scene.",
+        True,
     ),
     "game.screenshot": Operation(
         GameCapture,

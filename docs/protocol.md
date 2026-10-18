@@ -119,6 +119,18 @@ being read), `dropped` (entries the game discarded under backpressure), `running
 means the cursor space restarted. `file`/`line` are the innermost GDScript frame when
 available, with the engine's C++ origin in `native_file`/`native_line`.
 
+## Runtime inspection (editor play)
+
+`runtime.tree` (`path`, `max_nodes` 1-5000), `runtime.inspect`, `runtime.properties`,
+`runtime.get_property` and `runtime.set_property` forward a request id and params
+to the played game over Godot's debugger channel (`godotbridge:<command>`) and
+return the game's reply, or `GAME_NOT_RUNNING` / `TIMEOUT` (five seconds). Paths are
+relative to the running scene (`.` is its root) under the node-path rules above;
+values use the typed encoding and the same allowlist and type checks as `node.*`.
+Edits live only in the running game. `debug.status` returns `running`, `breaked`,
+`sessions` and `dap_port` (the editor setting `network/debug_adapter/remote_port`)
+from the editor debugger sessions.
+
 ## Error code vocabulary
 
 EDITOR_DISCONNECTED, AUTHENTICATION_FAILED, PROTOCOL_MISMATCH, INVALID_ARGUMENT,
@@ -126,5 +138,5 @@ INVALID_NODE_PATH, NODE_NOT_FOUND, SCENE_NOT_FOUND, SCENE_NOT_OPEN,
 RESOURCE_NOT_FOUND, UNSUPPORTED_NODE_TYPE, UNSUPPORTED_PROPERTY,
 UNSUPPORTED_OPERATION, READ_ONLY_RESOURCE, FILE_ACCESS_DENIED, PROJECT_NOT_FOUND,
 GODOT_NOT_FOUND, TIMEOUT, EDITOR_BUSY, TRANSACTION_FAILED, CAPTURE_UNAVAILABLE,
-INTERNAL_ERROR. Some codes are reserved for future operations. Error details may
+GAME_NOT_RUNNING, INTERNAL_ERROR. Some codes are reserved for future operations. Error details may
 contain bounded worker diagnostics; credentials are never included.

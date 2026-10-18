@@ -13,6 +13,8 @@ from .client import Client
 from .commands.common import config, emit, execute, options, perform
 from .commands.game import app as game_app
 from .commands.node import app as node_app
+from .commands.runtime import app as runtime_app
+from .commands.runtime import debug_app
 from .commands.scene import app as scene_app
 from .commands.three_d import app as three_d_app
 from .commands.visual import camera_info, screenshot, snapshot
@@ -31,6 +33,8 @@ app.add_typer(scene_app, name="scene")
 app.add_typer(node_app, name="node")
 app.add_typer(three_d_app, name="3d")
 app.add_typer(game_app, name="game")
+app.add_typer(runtime_app, name="runtime")
+app.add_typer(debug_app, name="debug")
 scene_app.command("snapshot")(snapshot)
 editor_app.command("screenshot")(screenshot)
 editor_app.command("camera-info")(camera_info)

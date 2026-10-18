@@ -65,6 +65,12 @@ crashed before its first frame sends nothing; read the editor's Output panel or
 use managed mode (`game logs`, stdout/stderr) instead. If the cursor stops
 advancing after an editor restart, compare `epoch` and restart from no `since`.
 
+**GAME_NOT_RUNNING / runtime TIMEOUT:** `runtime.*` needs a game started with
+`game run --mode editor` (managed games do not have it) and the
+`GodotBridgeRuntime` autoload in Project Settings > Globals > Autoload. A TIMEOUT means
+the game did not answer within five seconds (frozen main thread or no autoload). Trees
+are limited to 5,000 nodes per request.
+
 **Tests:** run `python scripts/run_integration_tests.py --graphical`. Artifacts and
 editor logs stay in `.artifacts/`. Tests without `--engine` skip engine integration
 explicitly. This Windows environment emits a root-certificate-store error from

@@ -102,6 +102,22 @@ static func decode(value: Variant, depth: int = 0) -> Dictionary:
 static func is_script_variable(info: Dictionary) -> bool:
 	return info.usage & PROPERTY_USAGE_SCRIPT_VARIABLE != 0 and info.usage & (PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_STORAGE) != 0
 
+## Exported script variables (name -> property info), the only non-allowlisted properties exposed.
+## A placeholder instance lists them without PROPERTY_USAGE_SCRIPT_VARIABLE, so the flag is read from the script itself.
+static func script_variables(node: Node) -> Dictionary:
+	var result := {}
+	var script: Script = node.get_script()
+	if script == null:
+		return result
+	var names := {}
+	for info in script.get_script_property_list():
+		if is_script_variable(info):
+			names[info.name] = true
+	for info in node.get_property_list():
+		if names.has(info.name):
+			result[info.name] = info
+	return result
+
 ## Placeholder script instances store values verbatim, so normalise what the engine would convert.
 static func coerce(info: Dictionary, value: Variant) -> Variant:
 	if info.type == TYPE_FLOAT and value is int:

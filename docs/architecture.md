@@ -114,8 +114,28 @@ Two cooperating parts use Godot's supported debugger message channel (prefix
   increasing sequence numbers and inserts `run_started`/`run_stopped` entries from the
   session signals so clients can separate runs.
 
+Runtime inspection uses the same channel in the other direction. The plugin sends
+`godotbridge:<command>` with `[request id, params]` through the active
+`EditorDebuggerSession`; the autoload registers `EngineDebugger.register_message_capture`
+and answers with `godotbridge:reply`, which `_capture` matches to the awaiting
+request (the dispatcher is already awaitable; five-second timeout). The game side
+(`runtime/runtime_inspector.gd`) reuses `codec.gd` for the property allowlist and
+typed values, resolves paths like `node_manager.resolve`, and bounds trees at 5,000
+nodes. Verified empirically: captures are still serviced while the game is stopped
+at a breakpoint, and the autoload also loads (inertly) in the managed runtime.
+
 This is distinct from managed-runtime stdout capture, which reads the supervised
 process's pipes and needs no debugger.
+
+## Breakpoints, stack and variables (not implemented)
+
+Godot's editor runs a Debug Adapter Protocol server (default `127.0.0.1:6006`).
+A stateless client (connect, request, disconnect per CLI call) was evaluated and is
+not reliable on 4.7.2: closing the connection leaves the game running and breakpoints
+set through `setBreakpoints` persist, but the server keeps global per-break state.
+After one client has called `scopes`/`variables`/`evaluate` (or stepped), a fresh
+connection's `stackTrace` returns no frames, and `stepOut`/`stepIn` can leave the
+connection unanswered. See PROGRESS.md for the details and the proposed alternative.
 
 ## Version-matched references
 

@@ -36,6 +36,10 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 		return visual.camera_info()
 	if method == "viewport.capture":
 		return await visual.capture(params)
+	if method.begins_with("runtime."):
+		return await plugin.debugger.request(method.trim_prefix("runtime."), params)
+	if method == "debug.status":
+		return plugin.debugger.debug_status()
 	if method.begins_with("game."):
 		if params.get("mode") != "editor":
 			return Transport.failure("UNSUPPORTED_OPERATION", "Managed games are controlled by the Python client.")

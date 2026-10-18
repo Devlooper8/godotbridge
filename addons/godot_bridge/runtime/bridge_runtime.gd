@@ -3,6 +3,7 @@ extends Node
 ## "GodotBridgeRuntime" autoload. It does nothing in the editor and in builds without an
 ## attached debugger (exports, bridge-managed runs), so shipping it is harmless.
 
+const Inspector = preload("runtime_inspector.gd")
 const MAX_QUEUE := 2000 # Entries buffered between frames; the oldest are dropped first.
 const MAX_BATCH := 200 # Entries sent per frame.
 const MAX_TEXT := 4096 # Characters kept per text field.
@@ -62,8 +63,27 @@ func _ready() -> void:
 		return
 	bridge_logger = BridgeLogger.new()
 	OS.add_logger(bridge_logger)
+	EngineDebugger.register_message_capture("godotbridge", _on_message)
+
+## Requests from the editor plugin: [request id, params]. Always answered, so the editor never waits for a timeout
+## because of a bad request.
+func _on_message(message: String, data: Array) -> bool:
+	if data.size() != 2 or not data[0] is int or not data[1] is Dictionary:
+		return true
+	var root := get_tree().current_scene
+	var reply: Dictionary
+	if root == null:
+		reply = Inspector.failure("SCENE_NOT_FOUND", "The game has no running scene yet.")
+	elif message == "tree":
+		reply = Inspector.tree(root, data[1])
+	else:
+		reply = Inspector.handle(root, message, data[1])
+	EngineDebugger.send_message("godotbridge:reply", [data[0], reply])
+	return true
 
 func _exit_tree() -> void:
+	if EngineDebugger.is_active() and EngineDebugger.has_capture("godotbridge"):
+		EngineDebugger.unregister_message_capture("godotbridge")
 	if bridge_logger:
 		OS.remove_logger(bridge_logger)
 		bridge_logger = null

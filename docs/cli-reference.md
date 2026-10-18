@@ -39,6 +39,34 @@ editor. Script parsing uses `--check-only --script`. `focus` selects a node and
 switches to 3D; it does not move the editor camera. Diagnostics are bridge-command
 failures, not a complete debugger stream.
 
+## Editor-play runtime inspection
+
+```text
+godotctl game run --mode editor --scene res://scenes/main.tscn
+godotctl debug status
+godotctl runtime tree [--path Player] [--max-nodes 1000]
+godotctl runtime inspect Player/Camera
+godotctl runtime properties Player
+godotctl runtime get Player speed
+godotctl runtime set Player speed 12.5
+godotctl runtime set Player position '{"type":"Vector3","value":[0,2,0]}'
+```
+
+These read and change the **live nodes of a game started with `game run --mode
+editor`** (or the editor's Play button); managed games do not have them. Paths are
+relative to the running scene's root (`.`), with the same rules as editor node
+paths, so autoloads are not addressable. `tree` returns the same node fields as
+the scene tree plus `child_count`, is capped (`--max-nodes` 1-5000; larger replies
+overflowed the debugger channel) and reports `truncated`. `set` only accepts the
+allowlisted node properties and exported script variables, type-checked, and
+changes the running game only: nothing is saved to the scene. `debug status`
+reports `running`, `breaked` (stopped at a breakpoint), per-session state and the
+`dap_port` Godot's debug adapter uses. Requests are answered by the game within five
+seconds (`TIMEOUT` otherwise) and also work while the game is stopped at a
+breakpoint. With no editor-played game they fail with `GAME_NOT_RUNNING`. Requires
+the `GodotBridgeRuntime` autoload, which the plugin adds. If several instances are
+run at once, the first active session answers.
+
 ## Scenes and nodes
 
 ```text

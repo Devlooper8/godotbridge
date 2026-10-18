@@ -35,11 +35,16 @@ Names generally map from protocol methods by replacing `.` with `_` and adding
 | Editor | `godot_editor_status`, `godot_editor_select`, `godot_editor_focus`, `godot_editor_undo`, `godot_editor_redo`, `godot_editor_camera_info`, `godot_editor_diagnostics` |
 | 3D | `godot_create_primitive`, `godot_create_light`, `godot_create_camera` |
 | Images | `godot_viewport_capture` |
+| Runtime (editor play) | `godot_runtime_tree`, `godot_runtime_inspect`, `godot_runtime_properties`, `godot_runtime_get_property`, `godot_runtime_set_property`, `godot_debug_status` |
 | Game | `godot_game_run`, `godot_game_stop`, `godot_game_status`, `godot_game_logs`, `godot_game_screenshot` |
 
 `godot_game_logs` with `mode: "managed"` returns the supervised process's stdout/stderr
 text; with `mode: "editor"` it returns structured debugger entries for the editor-played
 game and accepts `since` (previous `next`) and `limit`.
+
+The `godot_runtime_*` tools act on the live nodes of a game started with
+`godot_game_run` and `mode: "editor"`; `godot_runtime_set_property` changes the running
+game only. They fail with `GAME_NOT_RUNNING` when no editor-played game exists.
 
 Every tool has a description, explicit JSON input schema, and read-only/mutating
 annotations. Read-only annotations mean no scene mutation; capture tools still

@@ -149,21 +149,8 @@ static func is_tool_script(node: Node) -> bool:
 	var script: Script = node.get_script()
 	return script != null and script.is_tool()
 
-## Exported script variables (name -> property info) are the only non-allowlisted properties exposed.
-## A placeholder instance lists them without PROPERTY_USAGE_SCRIPT_VARIABLE, so the flag is read from the script itself.
 static func script_variables(node: Node) -> Dictionary:
-	var result := {}
-	var script: Script = node.get_script()
-	if script == null:
-		return result
-	var names := {}
-	for info in script.get_script_property_list():
-		if Codec.is_script_variable(info):
-			names[info.name] = true
-	for info in node.get_property_list():
-		if names.has(info.name):
-			result[info.name] = info
-	return result
+	return Codec.script_variables(node)
 
 func valid_name(parent: Node, value: String, exclude: Node = null) -> bool:
 	if value.is_empty() or value.validate_node_name() != value or value in [".", ".."] or value.begins_with("@"):

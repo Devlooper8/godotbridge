@@ -38,6 +38,25 @@ compromised process running as the same OS user.
 - MCP is stdio-only. No arbitrary GDScript, generic method invocation, shell
   execution, or unrestricted filesystem tool is exposed.
 
+## Godot's debug adapter
+
+Independently of this bridge, Godot's editor runs a Debug Adapter Protocol server
+on `127.0.0.1` (editor setting `network/debug_adapter/remote_port`, default 6006). It
+is **unauthenticated**: any local process of any user can connect, set breakpoints,
+read variables, evaluate expressions in a stopped game (verified: `evaluate` runs
+GDScript expressions) and control execution. It binds loopback only (checked with
+`netstat` on Windows) and is enabled by default in graphical and headless editors.
+GodotBridge neither uses nor exposes it and adds no new listener; the bridge's own
+runtime inspection goes through the authenticated bridge connection and Godot's
+editor-to-game debugger channel. If this matters for your threat model, change or
+firewall that port in the editor settings; this project cannot restrict it. A second
+editor on the same machine can fail to bind it, in which case tools talk to whichever
+editor owns the port.
+
+The `runtime.*` operations read and change live nodes of the played game, bounded by
+the same property allowlist and type checks as `node.*`; they cannot call methods,
+evaluate expressions or reach arbitrary properties, and nothing is saved.
+
 ## Practical boundaries
 
 Godot itself executes project code during editor loading, tool-script activity,

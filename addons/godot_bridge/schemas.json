@@ -1193,5 +1193,113 @@
     },
     "title": "GameLogs",
     "type": "object"
+  },
+  "debug.status": {
+    "additionalProperties": false,
+    "properties": {},
+    "title": "Empty",
+    "type": "object"
+  },
+  "runtime.tree": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "default": ".",
+        "description": "Subtree root relative to the running scene root",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      },
+      "max_nodes": {
+        "default": 1000,
+        "maximum": 5000,
+        "minimum": 1,
+        "title": "Max Nodes",
+        "type": "integer"
+      }
+    },
+    "title": "RuntimeTree",
+    "type": "object"
+  },
+  "runtime.inspect": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "default": ".",
+        "description": "Path relative to edited scene root; '.' is root",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      }
+    },
+    "title": "NodePath",
+    "type": "object"
+  },
+  "runtime.properties": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "default": ".",
+        "description": "Path relative to edited scene root; '.' is root",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      }
+    },
+    "title": "NodePath",
+    "type": "object"
+  },
+  "runtime.get_property": {
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "default": ".",
+        "description": "Path relative to edited scene root; '.' is root",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      },
+      "property": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Property",
+        "type": "string"
+      }
+    },
+    "required": [
+      "property"
+    ],
+    "title": "Property",
+    "type": "object"
+  },
+  "runtime.set_property": {
+    "$defs": {
+      "JsonValue": {}
+    },
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "default": ".",
+        "description": "Path relative to edited scene root; '.' is root",
+        "maxLength": 1024,
+        "title": "Path",
+        "type": "string"
+      },
+      "property": {
+        "maxLength": 128,
+        "minLength": 1,
+        "title": "Property",
+        "type": "string"
+      },
+      "value": {
+        "$ref": "#/$defs/JsonValue"
+      }
+    },
+    "required": [
+      "property",
+      "value"
+    ],
+    "title": "RuntimeSetProperty",
+    "type": "object"
   }
 }
