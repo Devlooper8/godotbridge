@@ -6,7 +6,6 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-import click
 import typer
 
 from .client import Client
@@ -25,6 +24,9 @@ from .install import install
 app = typer.Typer(
     no_args_is_help=True, help="GodotBridge: authenticated Godot 4 editor automation."
 )
+# Typer >=0.22 vendors Click, so its usage errors no longer subclass click.ClickException;
+# resolve the base from Typer itself to stay correct with both layouts.
+ClickException = next(c for c in typer.BadParameter.__mro__ if c.__name__ == "ClickException")
 project_app = typer.Typer(no_args_is_help=True)
 editor_app = typer.Typer(no_args_is_help=True)
 app.add_typer(project_app, name="project")
@@ -142,7 +144,7 @@ def main():
         result = app(standalone_mode=False)
         if isinstance(result, int):
             raise SystemExit(result)
-    except click.ClickException as exc:
+    except ClickException as exc:
         if "--json" in sys.argv:
             emit(
                 {
