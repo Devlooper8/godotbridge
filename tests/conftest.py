@@ -33,6 +33,9 @@ def editor(request, tmp_path_factory):
         dirs_exist_ok=True,
         ignore=shutil.ignore_patterns(".godot", "addons", "snapshots"),
     )
+    # CI runners have no sound device; real audio drivers log ERR_CANT_OPEN before falling
+    # back, which the managed-game tests would report as a runtime error.
+    (project / "override.cfg").write_text('[audio]\n\ndriver/driver="Dummy"\n', encoding="utf-8")
     config = Config.load(project, timeout=10)
     install(config)
     engine = discover()
