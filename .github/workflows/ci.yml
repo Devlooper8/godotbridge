@@ -28,6 +28,7 @@ jobs:
         if: always()
         with:
           name: results-${{ matrix.os }}-${{ matrix.python }}
+          include-hidden-files: true
           path: |
             .artifacts/editor-*.log
             dist/*
