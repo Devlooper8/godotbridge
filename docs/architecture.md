@@ -279,7 +279,8 @@ Nothing has to start in a particular order; each part recovers by itself.
   registry; it only answers requests if it was started with the autoload present.
   `test_plugin_added_while_a_game_runs_adopts_its_session` covers this with a test-only
   plugin that attaches a second bridge debugger plugin to a running game, the same engine
-  path as enabling the bridge. It does not toggle the real plugin with
+  path as enabling the bridge. It runs only with `--graphical`, because the played game
+  opens a window. It does not toggle the real plugin with
   `EditorInterface.set_plugin_enabled` (that would drop the test's own connection and start
   with an empty breakpoint registry), so the rest of plugin enabling (autoload registration,
   transport restart) is not exercised live.

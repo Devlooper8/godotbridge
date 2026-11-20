@@ -180,8 +180,11 @@ def install_probe(config):
     )
 
 
-def test_plugin_added_while_a_game_runs_adopts_its_session(extra_editor):
-    """`started` never fires for a run that began before the plugin existed; _setup_session adopts it."""
+def test_plugin_added_while_a_game_runs_adopts_its_session(extra_editor, graphical):
+    """`started` never fires for a run that began before the plugin existed; _setup_session adopts it.
+
+    Needs --graphical only for a display: the played game opens a window, which fails without one.
+    """
     with extra_editor(install_probe, name="adopt") as editor:
         scene = make_scene(editor, "spinner", SPINNER_SCRIPT)
         editor.call("game.run", mode="editor", scene=scene)

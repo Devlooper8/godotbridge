@@ -112,8 +112,11 @@ def test_editor_play_controls(editor, request):
         editor.call("game.stop", mode="editor")
 
 
-def test_run_current_rejects_an_unsaved_scene(editor):
+def test_run_current_rejects_an_unsaved_scene(editor, request):
     """The engine would stop a running game, then open a modal save dialog; managed mode would run main."""
+    if not request.config.getoption("--graphical"):
+        # The played game opens a window; without a display (Linux CI) it dies at startup.
+        pytest.skip("Editor play requires --graphical")
     write(editor, "scenes/run_current_base.tscn", INHERITABLE)
     # An inherited scene opens unsaved: its scene_path is empty.
     editor.call("scene.open", path="res://scenes/run_current_base.tscn", inherited=True)
