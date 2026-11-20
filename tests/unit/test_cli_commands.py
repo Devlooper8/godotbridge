@@ -1,5 +1,7 @@
 """Engine-free CLI checks: a stub client records what each command would send to the editor."""
 
+import re
+
 import pytest
 from godotbridge.cli import app
 from godotbridge.commands import common
@@ -7,6 +9,7 @@ from godotbridge.models import OPERATIONS
 from typer.testing import CliRunner
 
 runner = CliRunner()
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
 @pytest.fixture
@@ -32,7 +35,8 @@ def calls(monkeypatch, tmp_path):
 def help_text(*command):
     result = runner.invoke(app, [*command, "--help"])
     assert result.exit_code == 0, result.output
-    return " ".join(result.output.split())
+    # CI sets FORCE_COLOR, and Rich then splits "--viewport" with style codes.
+    return " ".join(ANSI.sub("", result.output).split())
 
 
 @pytest.mark.parametrize(
