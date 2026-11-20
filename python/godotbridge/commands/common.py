@@ -13,7 +13,12 @@ options: dict[str, Any] = {}
 
 
 def config() -> Config:
-    return Config.load(options.get("project"), options.get("godot"), options.get("timeout"))
+    return Config.load(
+        options.get("project"),
+        options.get("godot"),
+        options.get("timeout"),
+        options.get("connect_wait"),
+    )
 
 
 def emit(value: Any, machine: bool = False):

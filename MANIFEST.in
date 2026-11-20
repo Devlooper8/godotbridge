@@ -5,5 +5,5 @@ recursive-include docs *.md *.png
 recursive-include examples *.py *.godot *.tscn *.gd *.md
 prune examples/3d_demo/.godot
 prune examples/3d_demo/addons
-recursive-include tests *.py
+recursive-include tests *.py *.gd
 recursive-include scripts *.py

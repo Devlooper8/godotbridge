@@ -1,3 +1,4 @@
+import json
 import re
 import time
 
@@ -142,3 +143,65 @@ def test_managed_run_with_autoload_is_unaffected(editor):
     assert "probe debugger=false" in logs["log"]
     assert not logs["errors"], logs
     print(logs["log"])
+
+
+# A second debugger plugin added while a game runs takes the same engine path as enabling the bridge
+# plugin then (EditorDebuggerNode.add_debugger_plugin -> _setup_session), without tearing the connection down.
+PROBE_SCRIPT = """@tool
+extends EditorPlugin
+
+const Debugger = preload("res://addons/godot_bridge/debugger_plugin.gd")
+var probe
+
+func _process(_delta):
+	if probe or not FileAccess.file_exists("res://adopt.request"):
+		return
+	probe = Debugger.new()
+	probe.breakpoints = {"res://scripts/spinner.gd": {6: true}}
+	add_debugger_plugin(probe)
+	FileAccess.open("res://adopt.result", FileAccess.WRITE).store_string(
+		JSON.stringify({"run": probe.run, "sessions": probe.session_runs}))
+"""
+PROBE_CONFIG = '[plugin]\nname="AdoptProbe"\ndescription="test"\nauthor="test"\nversion="1"\nscript="plugin.gd"\n'
+SPINNER_SCRIPT = "extends Node3D\n\nvar ticks := 0\n\nfunc _process(_delta):\n\tticks += 1\n"
+
+
+def install_probe(config):
+    folder = config.project / "addons/adopt_probe"
+    folder.mkdir(parents=True)
+    (folder / "plugin.cfg").write_text(PROBE_CONFIG, encoding="utf-8")
+    (folder / "plugin.gd").write_text(PROBE_SCRIPT, encoding="utf-8")
+    settings = config.project / "project.godot"
+    text = settings.read_text(encoding="utf-8")
+    bridge = '"res://addons/godot_bridge/plugin.cfg"'
+    assert bridge in text
+    settings.write_text(
+        text.replace(bridge, bridge + ', "res://addons/adopt_probe/plugin.cfg"'), encoding="utf-8"
+    )
+
+
+def test_plugin_added_while_a_game_runs_adopts_its_session(extra_editor):
+    """`started` never fires for a run that began before the plugin existed; _setup_session adopts it."""
+    with extra_editor(install_probe, name="adopt") as editor:
+        scene = make_scene(editor, "spinner", SPINNER_SCRIPT)
+        editor.call("game.run", mode="editor", scene=scene)
+        try:
+            wait_until(lambda: editor.call("debug.status")["running"], 20, "editor game")
+            assert editor.call("debug.status")["breaked"] is False
+            (editor.config.project / "adopt.request").write_text("go", encoding="utf-8")
+            result_file = editor.config.project / "adopt.result"
+
+            def result():
+                try:
+                    return json.loads(result_file.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    return None
+
+            # The run is counted for the session that was already active.
+            assert wait_until(result, 20, "probe attach") == {"run": 1, "sessions": {"0": 1}}
+            # Its breakpoint registry reached the running game: the next frame stops on it.
+            wait_until(lambda: editor.call("debug.status")["breaked"], 20, "registry breakpoint")
+            frame = editor.call("debug.stack")["frames"][0]
+            assert (frame["function"], frame["line"]) == ("_process", 6)
+        finally:
+            editor.call("game.stop", mode="editor")

@@ -5,6 +5,7 @@ import asyncio
 import base64
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
 
 from mcp import types
@@ -13,16 +14,30 @@ from mcp.server.stdio import stdio_server
 
 from . import __version__
 from .client import Client
-from .config import Config
+from .config import Config, check_durations
 from .errors import BridgeError
 from .models import OPERATIONS
 
+DEFAULT_TIMEOUT = 30.0  # last resort after --timeout and godotbridge.toml; the CLI's is 15 s
 TOOL_OPERATIONS = {
     op.tool or "godot_" + name.replace(".", "_"): name for name, op in OPERATIONS.items()
 }
 
 
-def create_server(client: Client) -> Server:
+class LazyClient:
+    """Builds the Client on first successful use, so the server can start before the project exists."""
+
+    def __init__(self, load_config: Callable[[], Config]):
+        self._load_config = load_config
+        self._client: Client | None = None
+
+    def get(self) -> Client:
+        if self._client is None:
+            self._client = Client(self._load_config())
+        return self._client
+
+
+def create_server(lazy: LazyClient) -> Server:
     async def list_tools(_context, _params):
         return types.ListToolsResult(
             tools=[
@@ -45,7 +60,10 @@ def create_server(client: Client) -> Server:
             if params.name not in TOOL_OPERATIONS:
                 raise BridgeError("UNSUPPORTED_OPERATION", f"Unknown tool: {params.name}")
             operation = TOOL_OPERATIONS[params.name]
-            result = await asyncio.to_thread(client.call, operation, **(params.arguments or {}))
+            # get() reads config files, and call() blocks: both stay off the event loop.
+            result = await asyncio.to_thread(
+                lambda: lazy.get().call(operation, **(params.arguments or {}))
+            )
             structured = {"ok": True, "result": result}
             content: list = [
                 types.TextContent(type="text", text=json.dumps(structured, ensure_ascii=False))
@@ -91,12 +109,12 @@ def create_server(client: Client) -> Server:
         version=__version__,
         on_list_tools=list_tools,
         on_call_tool=call_tool,
-        instructions="Mutations affect the live Godot editor. Inspect state before retrying a timed-out mutation. All artifact paths are project-confined.",
+        instructions="Mutations affect the live Godot editor. Inspect state before retrying a timed-out mutation. All artifact paths are project-confined. Calls fail with EDITOR_DISCONNECTED until the editor with the enabled plugin is open; retry read-only calls, never blindly retry mutations.",
     )
 
 
-async def serve(config: Config):
-    server = create_server(Client(config))
+async def serve(load_config: Callable[[], Config]):
+    server = create_server(LazyClient(load_config))
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
@@ -105,11 +123,30 @@ def main():
     parser = argparse.ArgumentParser(description="GodotBridge MCP stdio server (official SDK 2.x)")
     parser.add_argument("--project", default=None)
     parser.add_argument("--godot", default=None)
-    parser.add_argument("--timeout", type=float, default=30)
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        help="seconds per call (0-600); overrides the godotbridge.toml timeout, "
+        f"which in turn overrides the default of {DEFAULT_TIMEOUT:g}",
+    )
+    parser.add_argument("--connect-wait", type=float, default=None)
     args = parser.parse_args()
     logging.basicConfig(level=logging.WARNING)
     try:
-        asyncio.run(serve(Config.load(args.project, args.godot, args.timeout)))
+        # Argument ranges fail now; the project may still appear later, so loading it is per call.
+        check_durations(args.timeout, args.connect_wait)
+        asyncio.run(
+            serve(
+                lambda: Config.load(
+                    args.project,
+                    args.godot,
+                    args.timeout,
+                    args.connect_wait,
+                    default_timeout=DEFAULT_TIMEOUT,
+                )
+            )
+        )
     except BridgeError as exc:
         parser.exit(exc.exit_code, f"{exc.code}: {exc.message}\n")
 

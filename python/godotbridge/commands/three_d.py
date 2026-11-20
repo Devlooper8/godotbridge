@@ -77,6 +77,9 @@ def camera(
     position: tuple[float, float, float] = (10, 8, 12),
     target: tuple[float, float, float] = (0, 0, 0),
     fov: float = 70,
+    current: bool = typer.Option(
+        True, "--current/--no-current", help="Make this the scene's current camera."
+    ),
     allow_tool_script: bool = typer.Option(False, help="Allow a parent with a @tool script."),
     json_output: bool = typer.Option(False, "--json"),
 ):
@@ -88,5 +91,6 @@ def camera(
         position=position,
         target=target,
         fov=fov,
+        current=current,
         allow_tool_script=allow_tool_script,
     )

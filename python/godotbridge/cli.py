@@ -47,10 +47,22 @@ def setup(
     project: Path = typer.Option(Path("."), envvar="GODOTBRIDGE_PROJECT"),
     godot: str | None = typer.Option(None, envvar="GODOT_EXECUTABLE"),
     timeout: float | None = typer.Option(None, min=0.01, max=600),
+    connect_wait: float | None = typer.Option(
+        None,
+        min=0,
+        max=600,
+        help="Seconds one operation may wait for the editor endpoint to become reachable.",
+    ),
     json_output: bool = typer.Option(False, "--json"),
 ):
     """Global options may precede any command; --json also works after commands."""
-    options.update(project=project, godot=godot, timeout=timeout, json=json_output)
+    options.update(
+        project=project,
+        godot=godot,
+        timeout=timeout,
+        connect_wait=connect_wait,
+        json=json_output,
+    )
 
 
 @app.command()
@@ -125,12 +137,13 @@ def redo(json_output: bool = typer.Option(False, "--json")):
 
 @editor_app.command("inspect")
 def inspect_node(path: str, json_output: bool = typer.Option(False, "--json")):
+    """Replace the editor selection with PATH and open it in the Inspector; scene is unchanged."""
     perform("editor.select", json_output, path=path)
 
 
 @editor_app.command("focus")
 def focus_node(path: str, json_output: bool = typer.Option(False, "--json")):
-    """Select a node and switch to the 3D workspace; does not reposition the editor camera."""
+    """Replace the editor selection with PATH and switch to the 3D workspace; camera is not moved."""
     perform("editor.focus", json_output, path=path)
 
 

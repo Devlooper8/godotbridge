@@ -10,6 +10,8 @@ const MAX_READ := 5000
 const REQUEST_TIMEOUT_MS := 5000
 const MAX_BREAKPOINTS := 500
 const STEP_TIMEOUT_MS := 3000
+const READY_BUDGET_MS := 5000 # How long request() waits for a freshly started game to become usable.
+const PING_INTERVAL_MS := 250
 
 ## Godot's debugger commands, as ScriptEditorDebugger sends them to the game with
 ## EditorDebuggerSession.send_message. These names are engine-internal, NOT a documented API: they were
@@ -29,6 +31,7 @@ var editor_breakpoints := {} # Breakpoints set in the script editor, seen throug
 var break_events := 0 # Counts session `breaked` signals; lets control commands wait for the next stop.
 var continue_events := 0
 var dropped := 0 # Entries the game discarded because its queue overflowed.
+var runtime_ready := {} # session id -> true once the game's autoload has sent anything; cleared on start and stop.
 
 func _has_capture(capture: String) -> bool:
 	return capture == "godotbridge"
@@ -39,6 +42,9 @@ func _setup_session(session_id: int) -> void:
 	session.stopped.connect(_on_stopped.bind(session_id))
 	session.breaked.connect(func(_can_debug): break_events += 1)
 	session.continued.connect(func(): continue_events += 1)
+	# The plugin can be added while a game is already running; `started` will not fire for that run.
+	if session.is_active():
+		_on_started(session_id)
 
 func _breakpoint_set_in_tree(script: Script, line: int, enabled: bool) -> void:
 	_mark(editor_breakpoints, script.resource_path, line, enabled)
@@ -56,6 +62,7 @@ static func _mark(registry: Dictionary, path: String, line: int, enabled: bool) 
 			registry.erase(path)
 
 func _on_started(session_id: int) -> void:
+	runtime_ready.erase(session_id)
 	var session := get_session(session_id)
 	for path in breakpoints:
 		for line in breakpoints[path]:
@@ -65,14 +72,17 @@ func _on_started(session_id: int) -> void:
 	_append(session_id, {"kind": "run_started", "level": "info", "message": "", "time": Time.get_unix_time_from_system()})
 
 func _on_stopped(session_id: int) -> void:
+	runtime_ready.erase(session_id)
 	_append(session_id, {"kind": "run_stopped", "level": "info", "message": "", "time": Time.get_unix_time_from_system()})
 
 func _capture(message: String, data: Array, session_id: int) -> bool:
 	if message == "godotbridge:log":
+		runtime_ready[session_id] = true
 		if data.size() == 1 and data[0] is Dictionary:
 			_collect(data[0], session_id)
 		return true
 	if message == "godotbridge:reply":
+		runtime_ready[session_id] = true
 		if data.size() == 2 and data[0] is int and data[1] is Dictionary and replies.has(data[0]):
 			replies[data[0]].reply = data[1]
 		return true
@@ -137,15 +147,35 @@ func debug_status() -> Dictionary:
 		"dap_port": int(settings.get_setting("network/debug_adapter/remote_port")),
 		"project": ProjectSettings.globalize_path("res://").trim_suffix("/")}}
 
-## Runs one request against the played game's autoload and waits for its reply (5 s).
+## Waits until an editor-played game has an active session whose autoload has answered (or logged), so the
+## next message is not lost to a game that is still starting. Pings carry their own ids and are never matched to
+## a waiting slot: any reply, even a late one, only proves readiness. Resolves to {"session": ...} or a failure.
+func _await_runtime(budget_ms: int) -> Dictionary:
+	var give_up := Time.get_ticks_msec() + budget_ms
+	var next_ping := 0
+	while true:
+		var id := _active_id()
+		if id >= 0 and runtime_ready.has(id):
+			return {"session": get_session(id)}
+		if id < 0 and not EditorInterface.is_playing_scene():
+			return Wire.failure("GAME_NOT_RUNNING", "No editor-played game is running; start one with game.run (mode editor).")
+		var now := Time.get_ticks_msec()
+		if now >= give_up:
+			return Wire.failure("TIMEOUT", "The game has not finished starting, or it has no GodotBridgeRuntime autoload (a game started before the plugin was enabled must be restarted).")
+		if id >= 0 and now >= next_ping:
+			get_session(id).send_message("godotbridge:ping", [next_request, {}])
+			next_request += 1
+			next_ping = now + PING_INTERVAL_MS
+		await Engine.get_main_loop().process_frame
+	return {}
+
+## Runs one request against the played game's autoload and waits for its reply (5 s). Waits first for the game to
+## be ready, then sends the command exactly once: runtime commands may mutate, so it is never resent.
 func request(command: String, params: Dictionary, timeout_ms: int = REQUEST_TIMEOUT_MS) -> Dictionary:
-	var session: EditorDebuggerSession = null
-	for candidate in get_sessions():
-		if candidate.is_active():
-			session = candidate
-			break
-	if session == null:
-		return Wire.failure("GAME_NOT_RUNNING", "No editor-played game is running; start one with game.run (mode editor).")
+	var ready := await _await_runtime(READY_BUDGET_MS)
+	if not ready.has("session"):
+		return ready
+	var session: EditorDebuggerSession = ready.session
 	var id := next_request
 	next_request += 1
 	var slot := {"reply": null}
@@ -159,11 +189,16 @@ func request(command: String, params: Dictionary, timeout_ms: int = REQUEST_TIME
 		return Wire.failure("TIMEOUT", "The game did not answer in time; it may be busy, or it has no GodotBridgeRuntime autoload.")
 	return slot.reply
 
+func _active_id() -> int:
+	var sessions := get_sessions()
+	for i in sessions.size():
+		if sessions[i].is_active():
+			return i
+	return -1
+
 func _active_session() -> EditorDebuggerSession:
-	for candidate in get_sessions():
-		if candidate.is_active():
-			return candidate
-	return null
+	var id := _active_id()
+	return get_session(id) if id >= 0 else null
 
 static func _lines(registry: Dictionary) -> Dictionary:
 	var result := {}
@@ -227,16 +262,12 @@ func control(kind: String) -> Dictionary:
 		return Wire.failure("GAME_NOT_RUNNING", "No editor-played game is running.")
 	if kind == "pause":
 		if session.is_breaked():
-			return {"ok": true, "result": {"breaked": true, "changed": false}}
+			return {"ok": true, "result": {"breaked": true, "running": true, "changed": false}}
 		# Breaking while the game is still starting up crashed the editor in testing; wait until the autoload answers.
-		var ready := {}
-		var give_up := Time.get_ticks_msec() + 10000
-		while Time.get_ticks_msec() < give_up:
-			ready = await request("ping", {}, 500)
-			if ready.get("ok", false) or ready.get("error", {}).get("code") != "TIMEOUT":
-				break
-		if not ready.get("ok", false):
+		var ready := await _await_runtime(10000)
+		if not ready.has("session"):
 			return ready
+		session = ready.session
 	elif not session.is_breaked():
 		return Wire.failure("NOT_BREAKED", "The game is not stopped at a breakpoint.")
 	var wait_for_break := kind != "continue"

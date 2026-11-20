@@ -74,6 +74,12 @@ func dispatch(method: String, params: Dictionary) -> Dictionary:
 					return Transport.failure("SCENE_NOT_FOUND", "Provide an existing project-local .tscn scene.")
 				EditorInterface.play_custom_scene(params.scene)
 			elif params.get("current", false):
+				# The engine stops a running game before it checks the scene, then opens a modal save dialog for an unsaved one.
+				var edited := EditorInterface.get_edited_scene_root()
+				if edited == null:
+					return Transport.failure("SCENE_NOT_OPEN", "Open or create a scene first.")
+				if edited.scene_file_path.is_empty():
+					return Transport.failure("SCENE_NOT_FOUND", "The current scene is unsaved; save it first (scene.save_as) before running it as the current scene.")
 				EditorInterface.play_current_scene()
 			else:
 				EditorInterface.play_main_scene()

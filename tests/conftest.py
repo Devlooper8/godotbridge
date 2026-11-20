@@ -1,3 +1,4 @@
+import contextlib
 import os
 import shutil
 import subprocess
@@ -21,25 +22,31 @@ def pytest_addoption(parser):
     )
 
 
-@pytest.fixture(scope="session")
-def editor(request, tmp_path_factory):
-    if not request.config.getoption("--engine"):
-        pytest.skip("Pass --engine to run actual Godot integration tests")
-    project = tmp_path_factory.mktemp("godot-project")
+def prepare_project(directory: Path) -> Config:
+    """Copy the demo project into `directory` and install the plugin from this checkout."""
     source = Path(__file__).resolve().parents[1] / "examples/3d_demo"
     shutil.copytree(
         source,
-        project,
+        directory,
         dirs_exist_ok=True,
         ignore=shutil.ignore_patterns(".godot", "addons", "snapshots"),
     )
     # CI runners have no sound device; real audio drivers log ERR_CANT_OPEN before falling
     # back, which the managed-game tests would report as a runtime error.
-    (project / "override.cfg").write_text('[audio]\n\ndriver/driver="Dummy"\n', encoding="utf-8")
-    config = Config.load(project, timeout=10)
+    (directory / "override.cfg").write_text('[audio]\n\ndriver/driver="Dummy"\n', encoding="utf-8")
+    config = Config.load(directory, timeout=10)
     install(config)
-    engine = discover()
-    log_path = project / "editor.log"
+    return config
+
+
+@contextlib.contextmanager
+def running_editor(config: Config, graphical: bool, name: str = "editor"):
+    """Run an editor on the project until the block ends; yields a Client once its scene is open.
+
+    `name` keeps the log and the isolated user directories of several editors on one project apart.
+    """
+    project = config.project
+    log_path = project / f"{name}.log"
     env = os.environ.copy()
     for variable in (
         "APPDATA",
@@ -48,11 +55,17 @@ def editor(request, tmp_path_factory):
         "XDG_DATA_HOME",
         "XDG_CACHE_HOME",
     ):
-        directory = project / "test-user" / variable
+        directory = project / "test-user" / name / variable
         directory.mkdir(parents=True, exist_ok=True)
         env[variable] = str(directory)
-    args = [str(engine.executable), "--path", str(project), "--editor", "res://scenes/main.tscn"]
-    if not request.config.getoption("--graphical"):
+    args = [
+        str(discover().executable),
+        "--path",
+        str(project),
+        "--editor",
+        "res://scenes/main.tscn",
+    ]
+    if not graphical:
         args.insert(1, "--headless")
     log = log_path.open("w", encoding="utf-8")
     process = subprocess.Popen(
@@ -92,14 +105,45 @@ def editor(request, tmp_path_factory):
             process.kill()
             process.wait(timeout=10)
         log.close()
-        artifact_dir = Path(__file__).resolve().parents[1] / ".artifacts"
-        artifact_dir.mkdir(exist_ok=True)
-        shutil.copy2(
-            log_path,
-            artifact_dir
-            / (
-                "editor-graphical.log"
-                if request.config.getoption("--graphical")
-                else "editor-headless.log"
-            ),
-        )
+
+
+@pytest.fixture(scope="session")
+def editor(request, tmp_path_factory):
+    if not request.config.getoption("--engine"):
+        pytest.skip("Pass --engine to run actual Godot integration tests")
+    graphical = request.config.getoption("--graphical")
+    config = prepare_project(tmp_path_factory.mktemp("godot-project"))
+    try:
+        with running_editor(config, graphical) as client:
+            yield client
+    finally:
+        log_path = config.project / "editor.log"
+        if log_path.exists():
+            artifact_dir = Path(__file__).resolve().parents[1] / ".artifacts"
+            artifact_dir.mkdir(exist_ok=True)
+            shutil.copy2(
+                log_path,
+                artifact_dir / ("editor-graphical.log" if graphical else "editor-headless.log"),
+            )
+
+
+@pytest.fixture
+def extra_editor(request, tmp_path_factory):
+    """Factory for one more headless editor on its own project copy, next to the session editor.
+
+    `extra_editor(before_launch)` is a context manager; `before_launch(config)` may seed files first.
+    Pass `config` to start another editor on an existing project instead of a fresh copy.
+    """
+    if not request.config.getoption("--engine"):
+        pytest.skip("Pass --engine to run actual Godot integration tests")
+
+    @contextlib.contextmanager
+    def start(before_launch=None, *, config=None, name="extra"):
+        if config is None:
+            config = prepare_project(tmp_path_factory.mktemp("godot-extra"))
+        if before_launch:
+            before_launch(config)
+        with running_editor(config, graphical=False, name=name) as client:
+            yield client
+
+    return start

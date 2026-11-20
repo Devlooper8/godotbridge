@@ -14,7 +14,6 @@ func _init() -> void:
 	control.toggled.connect(func(enabled): connection_toggled.emit(enabled))
 	add_child(control)
 
-func update_status(port: int, count: int, command: String, error: String) -> void:
+func update_status(state: String, count: int, command: String, error: String) -> void:
 	summary.text = "GodotBridge 0.1.0\n%s\n%s\nClients: %d\nLast: %s\n%s" % [
-		ProjectSettings.get_setting("application/config/name", ""),
-		"127.0.0.1:%d" % port if port else "Disconnected", count, command, error.left(160)]
+		ProjectSettings.get_setting("application/config/name", ""), state.left(160), count, command, error.left(160)]
