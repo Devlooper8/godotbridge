@@ -5,13 +5,29 @@ binary, including arbitrary paths or macOS `.app` bundles. Godot 3, prereleases,
 old 4.x engines and shell wrappers do not satisfy discovery.
 
 **EDITOR_DISCONNECTED:** open the selected project, install/enable the plugin,
-and inspect the GodotBridge dock. A connection file from a terminated editor is
-stale. Restart the plugin; clients rediscover credentials on each operation.
-If another editor owns the connection, close it before enabling a second one.
+and inspect the GodotBridge dock: it shows `127.0.0.1:<port>` while listening,
+`Retrying: <reason>` while the plugin retries (every 1 s, backing off to 10 s) and
+`Disabled` when its toggle is off. A connection file from a terminated editor is
+stale; a new editor takes it over once nothing on the old port answers a GodotBridge
+handshake. A port that is still open but held by another program no longer blocks the
+takeover, and an owner that is frozen or very slow (no editor frame for about a second)
+may be taken over as well.
+`Retrying: Another editor owns this project's connection` appears only while a GodotBridge
+that answers a handshake still sits on the old port, so that editor really is alive:
+close it. The plugin rewrites a deleted credentials file within about two
+seconds. Clients rediscover credentials on each operation. To ride out an editor
+that is still starting or restarting, pass `--connect-wait SECONDS`, set
+`connect_wait` in `godotbridge.toml` or give the MCP server `--connect-wait`: only
+connecting is retried (every 0.2 s), the operation itself is sent once. An MCP
+server may start before the project or editor exist; its calls fail with
+EDITOR_DISCONNECTED until the editor with the enabled plugin is open.
 
 **AUTHENTICATION_FAILED:** credentials may have rotated between reading and
-connecting. Reconnect by issuing a new read-only operation. Do not paste tokens
-into logs, issues or MCP client configuration.
+connecting (an editor restart). The client already reads the file again once
+immediately, and repeatedly while `connect_wait` lasts; a failure that persists
+means the file does not belong to the listening editor. Reconnect by issuing a new
+read-only operation. Do not paste tokens into logs, issues or MCP client
+configuration.
 
 **No endpoint / permissions failure:** use a writable local project. Unix needs
 working chmod semantics. Windows needs `whoami.exe` and `icacls.exe` available
@@ -20,7 +36,14 @@ execution-policy change is required.
 
 **TIMEOUT:** raise the global `--timeout` for a slow import or GPU. A timed-out
 mutation's outcome is unknown; inspect the scene before retrying. Viewport PNG
-readback/encoding can briefly occupy the editor thread.
+readback/encoding can briefly occupy the editor thread. A TIMEOUT can also come from the
+editor itself after 120 s ("did not finish within 120 s and was abandoned" in the editor
+log): a stuck operation no longer blocks the editor forever, but it may still finish its
+side effects later. The state is also in `editor diagnostics` (recent errors with the
+method and `TIMEOUT`).
+
+**INTERNAL_ERROR "failed inside the editor":** a handler hit a script error. Its outcome
+is unknown; read the editor log and inspect the scene before retrying.
 
 **READ_ONLY_RESOURCE:** structure changes to inherited-scene nodes (also returned
 for every node when the base scene changed on disk after the scene was opened:
@@ -67,9 +90,13 @@ advancing after an editor restart, compare `epoch` and restart from no `since`.
 
 **GAME_NOT_RUNNING / runtime TIMEOUT:** `runtime.*` needs a game started with
 `game run --mode editor` (managed games do not have it) and the
-`GodotBridgeRuntime` autoload in Project Settings > Globals > Autoload. A TIMEOUT means
-the game did not answer within five seconds (frozen main thread or no autoload). Trees
-are limited to 5,000 nodes per request.
+`GodotBridgeRuntime` autoload in Project Settings > Globals > Autoload. Right after
+`game run` the plugin first waits up to five seconds for the game to start and its
+autoload to answer; "has not finished starting, or it has no GodotBridgeRuntime
+autoload" means that wait ran out (a game started before the plugin was enabled has no
+autoload and must be restarted). Once the game is ready, a command it does not answer
+within five seconds (frozen main thread) is a TIMEOUT too; it is sent once and never
+resent. Trees are limited to 5,000 nodes per request.
 
 **NOT_BREAKED / breakpoint not hit:** `debug stack/variables/step/continue` need a game
 stopped at a breakpoint (see `debug status`). Breakpoints go on executable lines of a
