@@ -134,7 +134,7 @@ def unrelated_service(kind):
     """A loopback listener that is not a GodotBridge; yields its port.
 
     "silent" never accepts (the kernel still completes the TCP handshake), "close" drops each connection,
-    "http" answers like a web server that rejects the request.
+    "http" answers like a web server that rejects the request, "echo" sends every byte straight back.
     """
     server = socket.socket()
     server.bind(("127.0.0.1", 0))
@@ -153,6 +153,12 @@ def unrelated_service(kind):
             with connection:
                 if kind == "http":
                     connection.sendall(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n")
+                elif kind == "echo":
+                    # The probe's own frame comes back: right protocol version and request id, but no verdict.
+                    connection.settimeout(0.5)
+                    with contextlib.suppress(OSError):
+                        while chunk := connection.recv(65536):
+                            connection.sendall(chunk)
 
     thread = threading.Thread(target=serve, daemon=True)
     if kind != "silent":
@@ -166,7 +172,7 @@ def unrelated_service(kind):
         server.close()
 
 
-@pytest.mark.parametrize("kind", ["silent", "close", "http"])
+@pytest.mark.parametrize("kind", ["silent", "close", "http", "echo"])
 def test_stale_owner_whose_port_is_held_by_an_unrelated_service_is_taken_over(extra_editor, kind):
     with unrelated_service(kind) as service_port:
 

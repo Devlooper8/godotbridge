@@ -170,7 +170,9 @@ func _probe_handshake(probe: StreamPeerTCP, connect_by: int) -> bool:
 				if parser.parse(reply.slice(4, size + 4).get_string_from_utf8()) != OK:
 					return false
 				var data = parser.data
-				return data is Dictionary and data.get("protocol_version") == "1.0" and data.get("request_id") == PROBE_ID
+				# A bridge answers the bogus token with a failure envelope; an echo of our own frame has no verdict.
+				return data is Dictionary and data.get("protocol_version") == "1.0" and data.get("request_id") == PROBE_ID \
+						and data.get("ok") == false and data.get("error") is Dictionary
 		OS.delay_msec(5)
 	return false
 
