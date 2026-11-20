@@ -5,6 +5,7 @@ import os
 import subprocess
 import threading
 from collections import deque
+from dataclasses import replace
 
 from .config import Config
 from .diagnostics import classify
@@ -75,7 +76,8 @@ def require_offline(config: Config):
     if not config.connection_file.exists():
         return
     try:
-        Transport(config).request("handshake", {})
+        # A liveness probe, not an operation: a stale file must not make it wait.
+        Transport(replace(config, connect_wait=0.0)).request("handshake", {})
     except BridgeError as exc:
         if exc.code == "EDITOR_DISCONNECTED":
             return

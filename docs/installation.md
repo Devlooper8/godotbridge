@@ -51,11 +51,16 @@ Optional `godotbridge.toml` in the project:
 ```toml
 godot = '/absolute/path/to/Godot'
 timeout = 30
+connect_wait = 10
 ```
 
 `--project` or `GODOTBRIDGE_PROJECT` selects a project; the working directory is
-the fallback. Global options precede the command family. Timeouts are seconds;
-use `--timeout 120` for slow imports.
+the fallback. Global options precede the command family. Timeouts are seconds
+(`godotctl` default 15, or `timeout` from the file); use `--timeout 120` for slow imports.
+`godotbridge-mcp` uses its `--timeout` flag, else the file's `timeout`, else 30 s, read once
+when the first call loads the project. `connect_wait` / `--connect-wait` (0-600, default 0)
+lets an operation wait that long for the editor to become reachable before failing with
+`EDITOR_DISCONNECTED`; it never delays or repeats the operation itself.
 
 ## Plugin
 
@@ -102,3 +107,21 @@ Snapshots report `partial` with no image when no renderer exists.
 Validation reads saved files and imported resources, not unsaved editor changes.
 Import writes caches and is refused while a bridge editor is connected. Validation
 does not implicitly import resources or compile C# code.
+
+## Claude Code skill
+
+The repository includes a Claude Code skill that teaches Claude how to use GodotBridge
+through its MCP tools and `godotctl`. It lives at `.claude/skills/godotbridge/` and is
+picked up automatically in sessions opened in this repository. It is not part of the
+wheel; to use it elsewhere, copy the directory from a checkout:
+
+- all projects: `~/.claude/skills/godotbridge/`
+- one game project: `<game project>/.claude/skills/godotbridge/`
+
+```sh
+mkdir -p ~/.claude/skills && cp -r .claude/skills/godotbridge ~/.claude/skills/
+mkdir -p /work/game/.claude/skills && cp -r .claude/skills/godotbridge /work/game/.claude/skills/
+```
+
+The skill only describes the tools. The MCP server ([mcp-reference](mcp-reference.md)) or
+`godotctl` must still be installed and configured as described above.

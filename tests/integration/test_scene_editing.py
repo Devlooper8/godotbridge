@@ -1,5 +1,8 @@
+import math
+
 import pytest
 from godotbridge.errors import BridgeError
+from helpers import read, rejected, write
 
 pytestmark = pytest.mark.engine
 
@@ -130,3 +133,188 @@ def test_save_as_and_selection(editor):
     with pytest.raises(BridgeError) as error:
         editor.call("scene.save_as", path="res://scenes/save-as-source.tscn")
     assert error.value.code == "FILE_ACCESS_DENIED"
+
+
+REPARENT_2D = """[gd_scene format=3]
+
+[node name="Root" type="Node2D"]
+
+[node name="A" type="Node2D" parent="."]
+position = Vector2(100, 50)
+rotation = 0.5
+scale = Vector2(2, 3)
+
+[node name="C" type="Node2D" parent="."]
+position = Vector2(7, 9)
+
+[node name="Singular" type="Node2D" parent="."]
+scale = Vector2(0, 0)
+
+[node name="X" type="Node2D" parent="."]
+position = Vector2(3, 4)
+
+[node name="K" type="Node2D" parent="."]
+position = Vector2(11, 12)
+"""
+REPARENT_UI = """[gd_scene format=3]
+
+[node name="UI" type="Control"]
+layout_mode = 3
+anchors_preset = 0
+
+[node name="A" type="Control" parent="."]
+layout_mode = 0
+offset_left = 100.0
+offset_top = 50.0
+offset_right = 300.0
+offset_bottom = 150.0
+rotation = 0.5
+scale = Vector2(2, 3)
+
+[node name="Box" type="VBoxContainer" parent="."]
+layout_mode = 0
+offset_left = 300.0
+offset_top = 300.0
+offset_right = 400.0
+offset_bottom = 400.0
+
+[node name="C" type="Control" parent="."]
+layout_mode = 0
+offset_left = 7.0
+offset_top = 9.0
+offset_right = 37.0
+offset_bottom = 39.0
+rotation = 0.2
+scale = Vector2(1.5, 1.5)
+
+[node name="Full" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+"""
+
+
+def local_in_a(point):
+    """A point of the parent's space as seen from A (position (100, 50), rotation 0.5, scale (2, 3))."""
+    dx, dy = point[0] - 100, point[1] - 50
+    cos, sin = math.cos(0.5), math.sin(0.5)
+    return [(dx * cos + dy * sin) / 2, (-dx * sin + dy * cos) / 3]
+
+
+def vector(editor, path, property="position"):
+    value = editor.call("node.get_property", path=path, property=property)["value"]
+    return value["value"] if isinstance(value, dict) else value
+
+
+def test_reparent_keeps_global_pose_of_2d_nodes(editor):
+    write(editor, "scenes/reparent_2d.tscn", REPARENT_2D)
+    editor.call("scene.open", path="res://scenes/reparent_2d.tscn")
+    expected = local_in_a([7, 9])
+    editor.call("node.reparent", path="C", parent="A")
+    assert vector(editor, "A/C") == pytest.approx(expected, abs=1e-3)
+    editor.call("editor.undo")
+    assert vector(editor, "C") == [7, 9]
+    editor.call("editor.redo")
+    assert vector(editor, "A/C") == pytest.approx(expected, abs=1e-3)
+    # A parent whose transform cannot be inverted is refused; without keep_global the local pose is kept.
+    rejected(editor, "node.reparent", "INVALID_ARGUMENT", path="X", parent="Singular")
+    assert vector(editor, "X") == [3, 4]
+    editor.call("node.reparent", path="K", parent="A", keep_global=False)
+    assert vector(editor, "A/K") == [11, 12]
+
+
+def test_reparent_keeps_global_position_of_controls_and_undoes_container_layout(editor):
+    write(editor, "scenes/reparent_ui.tscn", REPARENT_UI)
+    editor.call("scene.open", path="res://scenes/reparent_ui.tscn")
+    editor.call("node.reparent", path="C", parent="A")
+    assert vector(editor, "A/C") == pytest.approx(local_in_a([7, 9]), abs=1e-3)
+    editor.call("editor.undo")
+    assert vector(editor, "C") == [7, 9]
+    # A Container overwrites the rect, rotation and scale of the Control it adopts; undo must bring them all back.
+    editor.call("scene.save")
+    before = read(editor, "scenes/reparent_ui.tscn")
+    for name in ["C", "Full"]:
+        editor.call("node.reparent", path=name, parent="Box")
+        editor.call("editor.undo")
+    assert vector(editor, "C") == [7, 9]
+    assert vector(editor, "C", "rotation") == pytest.approx(0.2)
+    assert vector(editor, "C", "scale") == [1.5, 1.5]
+    editor.call("scene.save")
+    assert read(editor, "scenes/reparent_ui.tscn") == before
+
+
+ROTATION_ORDER = """[gd_scene format=3]
+
+[node name="Order" type="Node3D"]
+
+[node name="Xyz" type="Node3D" parent="."]
+rotation_order = 0
+
+[node name="Zyx" type="Node3D" parent="."]
+rotation_order = 5
+"""
+
+
+def euler(editor, path):
+    return editor.call("node.inspect", path=path)["rotation_degrees"]["value"]
+
+
+def set_vector(editor, path, property, value):
+    editor.call(
+        "node.set_property",
+        path=path,
+        property=property,
+        value={"type": "Vector3", "value": value},
+    )
+
+
+@pytest.mark.parametrize("translate", [False, True])
+def test_position_edit_keeps_rotation_and_scale(editor, translate):
+    editor.call("scene.create", path=f"res://scenes/position_edit_{translate}.tscn")
+    editor.call("node.create", name="Obj")
+    set_vector(editor, "Obj", "rotation_degrees", [10, 20, 30])
+    set_vector(editor, "Obj", "scale", [2, 3, 4])
+    editor.call("node.set_transform", path="Obj", position=[1, 2, 3], translate=translate)
+    info = editor.call("node.inspect", path="Obj")
+    assert info["position"]["value"] == [1, 2, 3]
+    assert info["rotation_degrees"]["value"] == pytest.approx([10, 20, 30], abs=1e-3)
+    assert info["scale"]["value"] == pytest.approx([2, 3, 4])
+    # Each of rotation and scale leaves the other one alone.
+    editor.call("node.set_transform", path="Obj", rotation=[5, 6, 7])
+    assert euler(editor, "Obj") == pytest.approx([5, 6, 7], abs=1e-3)
+    assert editor.call("node.inspect", path="Obj")["scale"]["value"] == pytest.approx([2, 3, 4])
+    editor.call("node.set_transform", path="Obj", scale=[4, 3, 2])
+    assert euler(editor, "Obj") == pytest.approx([5, 6, 7], abs=1e-3)
+
+
+def test_set_transform_honors_rotation_order(editor):
+    write(editor, "scenes/rotation_order.tscn", ROTATION_ORDER)
+    editor.call("scene.open", path="res://scenes/rotation_order.tscn")
+    editor.call("node.set_transform", path="Xyz", rotation=[10, 20, 30])
+    assert euler(editor, "Xyz") == pytest.approx([10, 20, 30], abs=1e-3)
+    set_vector(editor, "Zyx", "rotation_degrees", [40, 50, 60])
+    set_vector(editor, "Zyx", "scale", [2, 3, 4])
+    editor.call("node.set_transform", path="Zyx", scale=[5, 6, 7])
+    assert euler(editor, "Zyx") == pytest.approx([40, 50, 60], abs=1e-3)
+    assert editor.call("node.inspect", path="Zyx")["scale"]["value"] == pytest.approx([5, 6, 7])
+    editor.call("node.set_transform", path="Zyx", rotation=[10, 20, 30], world=True)
+    assert euler(editor, "Zyx") == pytest.approx([10, 20, 30], abs=1e-3)
+
+
+def test_world_position_edit_under_scaled_parent_keeps_local_basis(editor):
+    editor.call("scene.create", path="res://scenes/world_position.tscn")
+    editor.call("node.create", name="P")
+    set_vector(editor, "P", "rotation_degrees", [0, 45, 0])
+    set_vector(editor, "P", "scale", [3, 1, 1])
+    editor.call("node.create", name="C", parent="P")
+    set_vector(editor, "P/C", "rotation_degrees", [0, 0, 30])
+    before = editor.call("node.get_property", path="P/C", property="transform")["value"]["basis"]
+    editor.call("node.set_transform", path="P/C", position=[9, 9, 9], world=True)
+    info = editor.call("node.inspect", path="P/C")
+    assert info["global_transform"]["origin"]["value"] == pytest.approx([9, 9, 9], abs=1e-4)
+    assert info["local_transform"]["basis"] == before
+    assert info["scale"]["value"] == pytest.approx([1, 1, 1])
+    assert info["rotation_degrees"]["value"] == pytest.approx([0, 0, 30], abs=1e-3)

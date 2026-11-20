@@ -15,7 +15,7 @@ func _scan(path: String) -> void:
 		failures.append("Cannot read " + path)
 		return
 	for name in dir.get_directories():
-		if name.begins_with(".") or name in ["addons", "test-user", "snapshots"] or dir.is_link(name):
+		if name.begins_with(".") or name in ["addons", "test-user", "snapshots"] or dir.is_link(name) or FileAccess.file_exists(path.path_join(name).path_join(".gdignore")):
 			continue
 		_scan(path.path_join(name))
 	for name in dir.get_files():

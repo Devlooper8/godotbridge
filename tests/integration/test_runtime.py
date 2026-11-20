@@ -136,3 +136,15 @@ def _large_tree(editor):
             return None
         raise
     return result if len(result["nodes"]) > 1 else None
+
+
+def test_runtime_call_right_after_game_run_needs_no_polling(editor, graphical):  # noqa: F811
+    scene = make_scene(editor, "immediate", TICKER)
+    editor.call("game.run", mode="editor", scene=scene)
+    try:
+        # The session is not active yet and the autoload has not registered its capture: the plugin waits.
+        tree = editor.call("runtime.tree")
+        assert tree["nodes"][0]["script"] == "res://scripts/immediate.gd"
+    finally:
+        editor.call("game.stop", mode="editor")
+    wait_until(lambda: not editor.call("debug.status")["running"], 10, "game to stop")

@@ -13,6 +13,10 @@ PLAIN = """extends Node3D
 @export_range(0, 10) var level: int = 1
 @export_enum("Low", "High:5") var mode: int = 0
 @export_enum("x", "y") var tag: String = "x"
+@export_flags_3d_physics var mask: int = 1
+@export_flags("A", "B", "C") var flags: int = 0
+@export_flags("Fire:1", "Ice:8") var element: int = 0
+@export_range(10, 90, 1, "radians_as_degrees") var angle: float = 1.0
 var hidden := 1
 """
 TOOL = """@tool
@@ -188,3 +192,25 @@ def test_integer_exports_stay_integers_and_honor_hints(scripted):
     text = read(scripted, "scenes/test_integer_exports_stay_integers_and_honor_hints.tscn")
     assert "health = 9" in text and "health = 9.0" not in text
     assert "level = 10" in text and "mode = 5" in text and 'tag = "y"' in text
+
+
+def test_flags_layers_and_degree_exports_honor_hints(scripted):
+    cases = [
+        ("mask", [-1, 4294967296], [5, 4294967295]),
+        ("flags", [8, -1], [7, 0]),
+        ("element", [2, 4, 16], [9, 8]),
+        ("angle", [0.1, 2.0], [1.0, 1.5707963267948966]),
+    ]
+    for property, bad, good in cases:
+        for candidate in bad:
+            rejected(
+                scripted,
+                "node.set_property",
+                "INVALID_ARGUMENT",
+                path="Plain",
+                property=property,
+                value=candidate,
+            )
+        for candidate in good:
+            scripted.call("node.set_property", path="Plain", property=property, value=candidate)
+        assert value(scripted, "Plain", property) == pytest.approx(good[-1])

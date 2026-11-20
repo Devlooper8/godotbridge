@@ -3,7 +3,23 @@
 GodotBridge uses the official Python MCP SDK **2.x** with local **stdio** transport.
 No HTTP or remote transport is exposed. Stdout is reserved for MCP messages;
 diagnostics use stderr. Start with `godotbridge-mcp --project /absolute/project`.
-Optional `--godot` and `--timeout` configure the same shared client backend.
+Optional `--godot`, `--timeout` and `--connect-wait` (seconds one call may wait for the
+editor endpoint, default 0) configure the same shared client backend. The call timeout is
+the `--timeout` flag, else the `timeout` key of `godotbridge.toml`, else 30 s (the CLI
+default is 15 s); `godot` and `connect_wait` fall back to the file as well. Both timeout
+sources are range-checked (0 < t <= 600): a bad `--timeout` or `--connect-wait` fails at
+startup (exit 2), while a bad `timeout` in the file is `INVALID_ARGUMENT` as a tool error on
+the call that loads the project. The server starts
+even if the project or editor does not exist yet: each tool call looks for the project and
+returns `PROJECT_NOT_FOUND` or `EDITOR_DISCONNECTED` as an ordinary tool error until they
+are there.
+
+The file is read once, when the first tool call succeeds in loading the project: the
+client is cached, so editing `godotbridge.toml` (including `timeout`) while the server
+runs has no effect until the MCP server restarts. A file `timeout` applies to every call,
+imports and validation included. This changes earlier behaviour: the `timeout` key used to
+be ignored here and calls always got 30 s, so a project with `timeout = 5` set for fast CLI
+failures now gets 5 s over MCP unless the server is started with `--timeout`.
 
 Example client configuration (adjust to your client's configuration format):
 
@@ -12,11 +28,13 @@ Example client configuration (adjust to your client's configuration format):
   "mcpServers": {
     "godotbridge": {
       "command": "C:\\work\\godotbridge\\.venv\\Scripts\\godotbridge-mcp.exe",
-      "args": ["--project", "D:\\Games\\Arena", "--timeout", "30"]
+      "args": ["--project", "D:\\Games\\Arena"]
     }
   }
 }
 ```
+
+Add `"--timeout", "60"` to the arguments only to override the file's `timeout` (or the 30 s default).
 
 On Linux/macOS use `/path/to/.venv/bin/godotbridge-mcp`. The client process must
 run as the same user as the editor so it can read private session credentials.
@@ -38,6 +56,10 @@ Names generally map from protocol methods by replacing `.` with `_` and adding
 | Runtime (editor play) | `godot_runtime_tree`, `godot_runtime_inspect`, `godot_runtime_properties`, `godot_runtime_get_property`, `godot_runtime_set_property` |
 | Debugger (editor play) | `godot_debug_status`, `godot_debug_breakpoints`, `godot_debug_set_breakpoints`, `godot_debug_clear_breakpoints`, `godot_debug_stack`, `godot_debug_variables`, `godot_debug_continue`, `godot_debug_step`, `godot_debug_pause` |
 | Game | `godot_game_run`, `godot_game_stop`, `godot_game_status`, `godot_game_logs`, `godot_game_screenshot` |
+
+`godot_editor_select` and `godot_editor_focus` replace the editor selection: they are
+state-changing editor operations, though they do not modify the scene (`godot_node_inspect`
+is the read-only counterpart), and focus also switches the editor to the 3D workspace.
 
 `godot_game_logs` with `mode: "managed"` returns the supervised process's stdout/stderr
 text; with `mode: "editor"` it returns structured debugger entries for the editor-played
@@ -92,8 +114,10 @@ Errors set MCP `isError` and provide a stable structured envelope:
 
 INVALID_ARGUMENT is a user/schema error; UNSUPPORTED_OPERATION indicates a
 capability limit; EDITOR_DISCONNECTED and AUTHENTICATION_FAILED describe connection
-problems; INTERNAL_ERROR indicates an unexpected server failure. TIMEOUT can mean
-a mutation completed without its response being received. Inspect before retrying.
+problems; INTERNAL_ERROR indicates an unexpected server failure, or a handler that failed
+inside the editor. TIMEOUT can mean a mutation completed without its response being
+received, and the editor itself sends it when one operation runs longer than 120 s. Both
+leave the outcome unknown: inspect before retrying.
 
 There is no arbitrary GDScript evaluation, object method invocation, shell tool,
 remote debugger access, or generic write-any-file tool.

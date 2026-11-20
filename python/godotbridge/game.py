@@ -24,6 +24,11 @@ def dispatch(client, operation: str, arguments: dict[str, Any]) -> dict:
     scene = arguments["scene"]
     if arguments["current"]:
         scene = client.call("scene.current")["scene_path"]
+        if not scene:
+            raise BridgeError(
+                "SCENE_NOT_FOUND",
+                "The current scene is unsaved; save it first (scene.save_as) before running it as the current scene.",
+            )
     if not scene:
         # ProjectSettings is authoritative; the client can read it in a headless
         # engine when no editor is available. Never parse project.godot as text.

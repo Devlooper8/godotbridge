@@ -7,6 +7,9 @@ const NODE_PROPERTIES := ["visible", "position", "rotation", "rotation_degrees",
 	"light_energy", "shadow_enabled", "omni_range", "spot_range", "spot_angle", "fov", "near", "far",
 	"current", "projection", "size", "mass", "gravity_scale", "collision_layer", "collision_mask",
 	"target_position", "enabled", "monitoring", "monitorable"]
+# AVOIDANCE is not contiguous with the other layer hints.
+const LAYER_HINTS := [PROPERTY_HINT_LAYERS_2D_RENDER, PROPERTY_HINT_LAYERS_2D_PHYSICS, PROPERTY_HINT_LAYERS_2D_NAVIGATION,
+	PROPERTY_HINT_LAYERS_3D_RENDER, PROPERTY_HINT_LAYERS_3D_PHYSICS, PROPERTY_HINT_LAYERS_3D_NAVIGATION, PROPERTY_HINT_LAYERS_AVOIDANCE]
 const RESOURCE_PROPERTIES := {
 	"BoxMesh": ["size"], "SphereMesh": ["radius", "height", "radial_segments", "rings"],
 	"CylinderMesh": ["top_radius", "bottom_radius", "height", "radial_segments"], "PlaneMesh": ["size"],
@@ -141,7 +144,7 @@ static func fits(info: Dictionary, key: String, value: Variant) -> bool:
 	if info.type == TYPE_STRING_NAME:
 		return value is String
 	if info.type == TYPE_OBJECT:
-		return value == null or (value is Resource and value.is_class(info.hint_string) and value.get_script() == null)
+		return value == null or (value is Resource and is_any_class(value, info.hint_string) and value.get_script() == null)
 	if info.type == TYPE_FLOAT or info.type == TYPE_INT:
 		if not (value is int or value is float) or not is_finite(float(value)):
 			return false
@@ -155,25 +158,48 @@ static func fits(info: Dictionary, key: String, value: Variant) -> bool:
 			return false
 		if key in ["radial_segments", "rings"] and (value < 4 or value > 256):
 			return false
-		return key != "" or hint_allows(info, value)
+		return hint_allows(info, value)
 	if info.type == TYPE_STRING and key == "" and info.hint == PROPERTY_HINT_ENUM:
 		return value is String and value in enum_entries(info.hint_string).keys()
 	if key in ["size", "scale"] and value is Vector3 and (value.x <= 0 or value.y <= 0 or value.z <= 0):
 		return false
 	return typeof(value) == info.type
 
-## @export_range / @export_enum limits of a script variable (the editor inspector enforces them).
+## Resource properties list their accepted classes in the hint string ("BaseMaterial3D,ShaderMaterial"); an empty hint matches nothing.
+static func is_any_class(object: Object, hint_string: String) -> bool:
+	for name in hint_string.split(","):
+		if object.is_class(name.strip_edges()):
+			return true
+	return false
+
+## The inspector's range, enum, flags and layer limits (the engine setters clamp or wrap instead of rejecting).
+## The hint bounds are in degrees for "radians_as_degrees" while the value is radians.
 static func hint_allows(info: Dictionary, value: Variant) -> bool:
 	if info.hint == PROPERTY_HINT_RANGE:
 		var parts: PackedStringArray = info.hint_string.split(",")
 		if parts.size() >= 2 and parts[0].is_valid_float() and parts[1].is_valid_float():
-			if value < float(parts[0]) and not "or_less" in parts:
+			var unit := deg_to_rad(1.0) if "radians_as_degrees" in parts else 1.0
+			var slack := 0.000000001 if unit != 1.0 else 0.0 # A bound such as 360 degrees must accept TAU.
+			if value < float(parts[0]) * unit - slack and not "or_less" in parts:
 				return false
-			if value > float(parts[1]) and not "or_greater" in parts:
+			if value > float(parts[1]) * unit + slack and not "or_greater" in parts:
 				return false
 	elif info.hint == PROPERTY_HINT_ENUM and info.type == TYPE_INT:
 		return int(value) in enum_entries(info.hint_string).values() # Array.has is type-strict.
+	elif info.type == TYPE_INT and info.hint == PROPERTY_HINT_FLAGS:
+		return value >= 0 and (int(value) & ~flags_mask(info.hint_string)) == 0
+	elif info.type == TYPE_INT and info.hint in LAYER_HINTS:
+		return value >= 0 # The engine wraps a negative mask to unsigned; fits() already caps it at 32 bits.
 	return true
+
+## "A,B:4,C" -> 1 | 4 | 4: an entry without a value is the bit 1 << its index (that is how the inspector reads @export_flags).
+static func flags_mask(hint_string: String) -> int:
+	var mask := 0
+	var entries := hint_string.split(",")
+	for index in entries.size():
+		var pair := entries[index].rsplit(":", true, 1)
+		mask |= int(pair[1]) if pair.size() == 2 and pair[1].is_valid_int() else 1 << index
+	return mask
 
 ## "A,B:5,C" -> {"A": 0, "B": 5, "C": 6}
 static func enum_entries(hint_string: String) -> Dictionary:

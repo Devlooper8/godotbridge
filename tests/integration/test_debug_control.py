@@ -126,7 +126,7 @@ def test_breakpoint_set_while_running_and_pause(editor, graphical):  # noqa: F81
         rejected(editor, "debug.continue", "NOT_BREAKED")
         # Pause stops at a frame boundary, outside any script, so there are no script frames yet.
         assert editor.call("debug.pause")["breaked"] is True
-        assert editor.call("debug.pause")["changed"] is False
+        assert editor.call("debug.pause") == {"breaked": True, "running": True, "changed": False}
         assert editor.call("debug.stack")["frames"] == []
         # Step in runs to the next script line (step over would not stop: there is no frame to step in).
         assert editor.call("debug.step", kind="in")["breaked"] is True

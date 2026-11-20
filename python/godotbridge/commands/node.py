@@ -120,6 +120,7 @@ def inspect(path: str = ".", json_output: bool = typer.Option(False, "--json")):
 
 @app.command()
 def select(path: str, json_output: bool = typer.Option(False, "--json")):
+    """Replace the editor selection with PATH and open it in the Inspector; scene is unchanged."""
     perform("editor.select", json_output, path=path)
 
 
@@ -176,7 +177,8 @@ def transform_command(field: str, translate: bool = False):
             **{field: [x, y, z]},
         )
 
-    command.__doc__ = f"Set {field} in {'degrees' if field == 'rotation' else 'Godot units'}; --world uses world space."
+    verb = "Add a delta to" if translate else "Set"
+    command.__doc__ = f"{verb} {field} in {'degrees' if field == 'rotation' else 'Godot units'}; --world uses world space."
     return command
 
 

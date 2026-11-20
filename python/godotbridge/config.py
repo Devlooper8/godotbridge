@@ -8,11 +8,22 @@ from pathlib import Path
 from .errors import BridgeError
 
 
+def check_durations(timeout: object, connect_wait: object) -> None:
+    """Range checks that do not depend on a project, so servers can run them at startup."""
+    if timeout is not None and (not isinstance(timeout, (int, float)) or not 0 < timeout <= 600):
+        raise BridgeError("INVALID_ARGUMENT", "Timeout must be between 0 and 600 seconds.")
+    if connect_wait is not None and (
+        not isinstance(connect_wait, (int, float)) or not 0 <= connect_wait <= 600
+    ):
+        raise BridgeError("INVALID_ARGUMENT", "connect_wait must be between 0 and 600 seconds.")
+
+
 @dataclass(frozen=True)
 class Config:
     project: Path
     godot: str | None = None
     timeout: float = 15.0
+    connect_wait: float = 0.0
 
     @classmethod
     def load(
@@ -20,6 +31,8 @@ class Config:
         project: str | Path | None = None,
         godot: str | None = None,
         timeout: float | None = None,
+        connect_wait: float | None = None,
+        default_timeout: float = 15.0,
     ) -> "Config":
         root = Path(project or os.getenv("GODOTBRIDGE_PROJECT", ".")).resolve()
         if root.is_file() and root.name == "project.godot":
@@ -33,10 +46,15 @@ class Config:
                 settings = tomllib.loads(file.read_text(encoding="utf-8"))
             except (OSError, ValueError) as exc:
                 raise BridgeError("INVALID_ARGUMENT", f"Cannot read {file}: {exc}") from exc
-        duration = timeout if timeout is not None else settings.get("timeout", 15.0)
-        if not isinstance(duration, (int, float)) or not 0 < duration <= 600:
-            raise BridgeError("INVALID_ARGUMENT", "Timeout must be between 0 and 600 seconds.")
-        return cls(root, godot or os.getenv("GODOT_EXECUTABLE") or settings.get("godot"), duration)
+        duration = timeout if timeout is not None else settings.get("timeout", default_timeout)
+        wait = connect_wait if connect_wait is not None else settings.get("connect_wait", 0.0)
+        check_durations(duration, wait)
+        return cls(
+            root,
+            godot or os.getenv("GODOT_EXECUTABLE") or settings.get("godot"),
+            duration,
+            float(wait),
+        )
 
     @property
     def connection_file(self) -> Path:

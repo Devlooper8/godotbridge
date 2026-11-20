@@ -33,17 +33,32 @@ def directory(config: Config) -> Path:
 def atomic_json(path: Path, value: Any):
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(value), encoding="utf-8")
-    temporary.replace(path)
+    # Windows refuses to replace a file another process has open, and a status poll or scanner
+    # holds it for a moment. Without a retry the supervisor dies mid-run and leaks run.lock.
+    deadline = time.monotonic() + 2
+    while True:
+        try:
+            temporary.replace(path)
+            return
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.01)
 
 
 def status(config: Config) -> dict:
     path = directory(config) / "status.json"
     if not path.exists():
         return {"state": "stopped", "running": False, "exit_code": None}
-    try:
-        result = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        raise BridgeError("INTERNAL_ERROR", "Cannot read managed game state.") from exc
+    for attempt in range(5):
+        try:
+            result = json.loads(path.read_text(encoding="utf-8"))
+            break
+        except (OSError, ValueError) as exc:
+            # The supervisor's replace can briefly deny the open on Windows.
+            if attempt == 4:
+                raise BridgeError("INTERNAL_ERROR", "Cannot read managed game state.") from exc
+            time.sleep(0.02)
     if result.get("running") and time.time() - result.get("heartbeat", 0) > 15:
         result.update(
             state="unresponsive",
@@ -269,18 +284,21 @@ def supervise(config: Config, run_id: str):
     except Exception as exc:
         state.update(running=False, state="failed", error=str(exc), heartbeat=time.time())
     finally:
-        if process and process.poll() is None:
-            process.kill()
-            process.wait(timeout=10)
-        if reader:
-            reader.join(timeout=5)
-        if process and process.stdout:
-            process.stdout.close()
-        (run / "recent.log").write_text(
-            b"".join(list(chunks)).decode("utf-8", errors="replace"), encoding="utf-8"
-        )
-        atomic_json(base / "status.json", state)
-        (base / "run.lock").unlink(missing_ok=True)
+        try:
+            if process and process.poll() is None:
+                process.kill()
+                process.wait(timeout=10)
+            if reader:
+                reader.join(timeout=5)
+            if process and process.stdout:
+                process.stdout.close()
+            (run / "recent.log").write_text(
+                b"".join(list(chunks)).decode("utf-8", errors="replace"), encoding="utf-8"
+            )
+            atomic_json(base / "status.json", state)
+        finally:
+            # A leaked lock blocks every later start until someone deletes it by hand.
+            (base / "run.lock").unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

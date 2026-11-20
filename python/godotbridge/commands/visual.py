@@ -1,6 +1,15 @@
+from typing import Annotated
+
 import typer
 
 from .common import perform
+
+Viewport = Annotated[
+    int,
+    typer.Option(
+        min=0, max=3, help="Editor 3D viewport index 0-3 (split layouts); only for --method editor."
+    ),
+]
 
 
 def screenshot(
@@ -12,6 +21,7 @@ def screenshot(
     distance: float = 25,
     position: tuple[float, float, float] = (15, 13, 18),
     target: tuple[float, float, float] = (0, 0, 0),
+    viewport: Viewport = 0,
     json_output: bool = typer.Option(False, "--json"),
 ):
     """Capture a real editor viewport or --method preview. Output is relative to the project."""
@@ -26,6 +36,7 @@ def screenshot(
         distance=distance,
         position=position,
         target=target,
+        viewport=viewport,
     )
 
 
@@ -38,6 +49,7 @@ def snapshot(
     distance: float = 25,
     position: tuple[float, float, float] = (15, 13, 18),
     target: tuple[float, float, float] = (0, 0, 0),
+    viewport: Viewport = 0,
     json_output: bool = typer.Option(False, "--json"),
 ):
     """Save structured scene metadata and a PNG; report partial status if capture is unavailable."""
@@ -52,6 +64,7 @@ def snapshot(
         distance=distance,
         position=position,
         target=target,
+        viewport=viewport,
     )
 
 

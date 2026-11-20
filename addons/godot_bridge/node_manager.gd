@@ -378,20 +378,16 @@ func handle(method: String, params: Dictionary) -> Dictionary:
 				return Wire.failure("INVALID_ARGUMENT", "Reparent would move the root or create a cycle.")
 			if not valid_name(parent, String(node.name), node):
 				return error
-			var old_transform: Transform3D = node.transform if node is Node3D else Transform3D.IDENTITY
-			var new_transform := old_transform
-			if node is Node3D and params.get("keep_global", true):
-				new_transform = node.global_transform
-				if parent is Node3D and not node.top_level:
-					if absf(parent.global_transform.basis.determinant()) < 0.000001:
-						return Wire.failure("INVALID_ARGUMENT", "Cannot invert the new parent's singular transform.")
-					new_transform = parent.global_transform.affine_inverse() * new_transform
-			if not new_transform.is_finite():
-				return Wire.failure("INVALID_ARGUMENT", "Reparent transform exceeds the engine's numeric range.")
+			var old_pose := pose(node) # Captured even without keep_global: a Container overwrites the Control it adopts.
+			var new_pose := old_pose if node is Node3D else {}
+			if params.get("keep_global", true) and (node is Node3D or node is Node2D or node is Control):
+				new_pose = global_pose(node, parent)
+				if new_pose.is_empty():
+					return error
 			undo.create_action("GodotBridge: reparent", 0, root)
 			var owned := owned_nodes(node)
-			undo.add_do_method(self, "_move", node, parent, root, parent.get_child_count(), new_transform, owned)
-			undo.add_undo_method(self, "_move", node, node.get_parent(), root, node.get_index(), old_transform, owned)
+			undo.add_do_method(self, "_move", node, parent, root, parent.get_child_count(), new_pose, owned)
+			undo.add_undo_method(self, "_move", node, node.get_parent(), root, node.get_index(), old_pose, owned)
 			undo.commit_action()
 			return success(describe(node))
 	return Wire.failure("UNSUPPORTED_OPERATION", "Unknown node operation.")
@@ -412,14 +408,38 @@ func instantiate(params: Dictionary) -> Dictionary:
 	if path == root.scene_file_path or root.scene_file_path in closure:
 		return Wire.failure("INVALID_ARGUMENT", "A scene cannot be instanced into itself, directly or through another scene.")
 	if not allow_tool:
+		# Loading a @tool script in the editor runs its _static_init and static var initialisers, so everything that
+		# source text can show is checked before anything is loaded; the closure already follows script bases and the
+		# targets named inside embedded scripts. Fails closed: a quoted "@tool" only costs the opt-in.
+		var tool_marker := RegEx.create_from_string("(?m)^[^#\\n]*@tool\\b")
+		var refusal := Wire.failure("READ_ONLY_RESOURCE", "The scene uses a @tool script that would run in the editor; pass allow_tool_script to instance it anyway.")
 		for dependency in closure:
-			if dependency.get_extension() in ["gd", "cs"]:
+			if dependency.get_extension() == "gd" and FileAccess.file_exists(dependency) and tool_marker.search(FileAccess.get_file_as_string(dependency)):
+				return refusal
+			# A GDScript embedded in a scene or resource file is no dependency, and a resource's script runs while its
+			# file loads (any "@tool" next to a GDScript is refused).
+			if dependency.get_extension() in ["tscn", "tres"] and FileAccess.file_exists(dependency):
+				var text := FileAccess.get_file_as_string(dependency)
+				if text.contains("GDScript") and text.contains("@tool"):
+					return refusal
+		# The script cache can hold a version older than the file (a live node keeps it alive), so a cached script is
+		# checked too; loading a cached script runs nothing and an uncached one is never loaded here. C# scripts have
+		# no text check and are loaded.
+		for dependency in closure:
+			var extension: String = dependency.get_extension()
+			if extension == "cs" or (extension == "gd" and ResourceLoader.has_cached(dependency)):
 				var script = ResourceLoader.load(dependency)
 				while script is Script:
 					if script.is_tool():
-						return Wire.failure("READ_ONLY_RESOURCE", "The scene uses a @tool script that would run in the editor; pass allow_tool_script to instance it anyway.")
+						return refusal
 					script = script.get_base_script()
-	var packed = ResourceLoader.load(path, "PackedScene")
+		# What text cannot show (binary scenes, script overrides on instances) is read from the loaded scene states.
+		for dependency in closure:
+			if dependency.get_extension() in ["tscn", "scn"] and embeds_tool_script(dependency):
+				return refusal
+	# REUSE hands back the sub-resources of every live or undo-held instance (new nodes, stale resources); REPLACE
+	# would rewrite those live nodes in place and IGNORE_DEEP reloads cached scripts in place.
+	var packed = ResourceLoader.load(path, "PackedScene", ResourceLoader.CACHE_MODE_IGNORE)
 	if not packed is PackedScene or not packed.can_instantiate():
 		return Wire.failure("SCENE_NOT_FOUND", "File is not an instantiable PackedScene.")
 	var node: Node = packed.instantiate(PackedScene.GEN_EDIT_STATE_INSTANCE)
@@ -438,37 +458,79 @@ func instantiate(params: Dictionary) -> Dictionary:
 			index += 1
 	return add_node(parent, node)
 
-## Every res:// file reachable from start through ResourceLoader dependencies and, for scripts, their base-script
-## chain and quoted res:// paths in the source (preload/load targets). "complete" is false when the 512-file
-## cap was hit; callers must then fail closed.
+## True when a node of the scene, or a script override on one of its instanced nodes, carries a @tool script (or derives
+## one). Loading a PackedScene does not run node scripts, but it does compile the scripts embedded in it (running the
+## static initialisers of whatever they extend), so this runs only after the text checks passed.
+static func embeds_tool_script(scene_path: String) -> bool:
+	var packed = ResourceLoader.load(scene_path, "PackedScene", ResourceLoader.CACHE_MODE_IGNORE)
+	if not packed is PackedScene:
+		return false
+	var state: SceneState = packed.get_state()
+	for node_index in state.get_node_count():
+		for property_index in state.get_node_property_count(node_index):
+			if state.get_node_property_name(node_index, property_index) == &"script":
+				var script = state.get_node_property_value(node_index, property_index)
+				while script is Script:
+					if script.is_tool():
+						return true
+					script = script.get_base_script()
+	return false
+
+## The res:// path of a uid:// text, or fallback when no file registered it (ResourceUID.get_id_path logs an error then).
+static func uid_path(text: String, fallback: String = "") -> String:
+	var id := ResourceUID.text_to_id(text)
+	return ResourceUID.get_id_path(id) if ResourceUID.has_id(id) else fallback
+
+## Every res:// file reachable from start through ResourceLoader dependencies and, in script sources (a .gd file, or a
+## text scene/resource that embeds GDScripts), quoted res:// or uid:// paths (preload/load targets) and `extends` bases
+## (a path, a path relative to the file, or a global class_name). Read from text only, because loading a @tool script
+## runs its static initialisers; an `extends` identifier that is no native or global class (an inner class) names no
+## file. "complete" is false when the 512-file cap was hit; callers must then fail closed.
 static func dependency_closure(start: String) -> Dictionary:
 	var seen := {start: true}
 	var pending := [start]
-	var regex := RegEx.create_from_string("[\"'](res://[^\"']+)[\"']")
+	var quoted := RegEx.create_from_string("[\"']((?:res|uid)://[^\"']+)[\"']")
+	var extending := RegEx.create_from_string("\\bextends\\s+(?:[\"']([^\"'\\n]+)[\"']|([A-Za-z_]\\w*))")
+	var classes := {}
+	for entry in ProjectSettings.get_global_class_list():
+		classes[String(entry["class"])] = entry["path"]
 	while not pending.is_empty():
 		if seen.size() >= 512:
 			return {"files": seen.keys(), "complete": false}
 		var current: String = pending.pop_back()
 		var found: Array[String] = []
 		var extension := current.get_extension()
+		var source := ""
 		if extension in ["tscn", "scn", "tres", "res"]:
 			for entry in ResourceLoader.get_dependencies(current):
 				var parts: PackedStringArray = entry.split("::")
 				var dependency: String = parts[parts.size() - 1]
 				# A uid survives moves, so it wins when the recorded path no longer exists.
 				if parts[0].begins_with("uid://") and (dependency.is_empty() or not FileAccess.file_exists(dependency)):
-					var id := ResourceUID.text_to_id(parts[0])
-					dependency = ResourceUID.get_id_path(id) if ResourceUID.has_id(id) else dependency
+					dependency = uid_path(parts[0], dependency)
 				if not dependency.is_empty():
 					found.append(dependency)
+			if extension in ["tscn", "tres"] and FileAccess.file_exists(current):
+				source = FileAccess.get_file_as_string(current)
+				# Embedded sources are escaped string values; only a file with a GDScript has any.
+				source = source.replace("\\\"", "\"") if source.contains("GDScript") else ""
 		elif extension == "gd" and FileAccess.file_exists(current):
-			for match in regex.search_all(FileAccess.get_file_as_string(current)):
-				found.append(match.get_string(1))
-			var script = ResourceLoader.load(current)
-			var base = script.get_base_script() if script is Script else null
-			while base != null and not base.resource_path.is_empty():
-				found.append(base.resource_path)
-				base = base.get_base_script()
+			source = FileAccess.get_file_as_string(current)
+		for match in quoted.search_all(source):
+			var target := match.get_string(1)
+			if target.begins_with("uid://"):
+				target = uid_path(target) # An unregistered uid cannot be loaded by the engine either.
+			if not target.is_empty():
+				found.append(target)
+		for match in extending.search_all(source):
+			var base := match.get_string(1)
+			if not base.is_empty():
+				if not base.contains("://"):
+					var relative := current.get_base_dir().path_join(base).simplify_path()
+					if FileAccess.file_exists(relative):
+						found.append(relative)
+			elif not ClassDB.class_exists(match.get_string(2)) and classes.has(match.get_string(2)):
+				found.append(classes[match.get_string(2)])
 		for dependency in found:
 			if not seen.has(dependency):
 				seen[dependency] = true
@@ -495,24 +557,33 @@ func set_transform(node: Node, params: Dictionary) -> Dictionary:
 	if not node is Node3D:
 		return Wire.failure("UNSUPPORTED_NODE_TYPE", "Transforms require Node3D.")
 	var world: bool = params.get("world", false)
-	var transform: Transform3D = node.global_transform if world else node.transform
-	var position: Vector3 = transform.origin
-	var rotation: Vector3 = transform.basis.get_euler()
-	var scale: Vector3 = transform.basis.get_scale()
+	var current: Transform3D = node.global_transform if world else node.transform
+	var origin := current.origin
 	if params.get("position") != null:
 		var vector := vector3(params.position)
-		position = position + vector if params.get("translate", false) else vector
-	if params.get("rotation") != null:
-		rotation = vector3(params.rotation) * (PI / 180.0)
-	if params.get("scale") != null:
-		scale = vector3(params.scale)
-		if minf(absf(scale.x), minf(absf(scale.y), absf(scale.z))) < 0.00001:
-			return Wire.failure("INVALID_ARGUMENT", "Scale components must be nonzero.")
-	var updated := Transform3D(Basis.from_euler(rotation).scaled_local(scale), position)
-	if world and not node.top_level and node.get_parent_node_3d():
-		if absf(node.get_parent_node_3d().global_transform.basis.determinant()) < 0.000001:
+		origin = origin + vector if params.get("translate", false) else vector
+	# A position-only edit must not rebuild the basis: that would drop shear and, through the euler round trip, change
+	# the rotation of a scaled node.
+	var basis := current.basis
+	var reshaped: bool = params.get("rotation") != null or params.get("scale") != null
+	if reshaped:
+		var order: int = node.rotation_order
+		var scale := basis.get_scale()
+		var euler := basis.get_rotation_quaternion().get_euler(order) # Basis.get_euler() assumes no scale.
+		if params.get("rotation") != null:
+			euler = vector3(params.rotation) * (PI / 180.0)
+		if params.get("scale") != null:
+			scale = vector3(params.scale)
+			if minf(absf(scale.x), minf(absf(scale.y), absf(scale.z))) < 0.00001:
+				return Wire.failure("INVALID_ARGUMENT", "Scale components must be nonzero.")
+		basis = Basis.from_euler(euler, order).scaled_local(scale)
+	var updated := Transform3D(basis, origin)
+	var parent: Node3D = node.get_parent_node_3d()
+	if world and not node.top_level and parent:
+		if absf(parent.global_transform.basis.determinant()) < 0.000001:
 			return Wire.failure("INVALID_ARGUMENT", "Cannot invert the parent's singular transform.")
-		updated = node.get_parent_node_3d().global_transform.affine_inverse() * updated
+		var inverse: Transform3D = parent.global_transform.affine_inverse()
+		updated = inverse * updated if reshaped else Transform3D(node.transform.basis, inverse * origin)
 	if not updated.is_finite():
 		return Wire.failure("INVALID_ARGUMENT", "Transform exceeds the engine's finite numeric range.")
 	return set_properties(node, {"transform": updated})
@@ -525,11 +596,60 @@ func _attach(parent: Node, node: Node, scene_root: Node, index: int, owned: Arra
 	if index >= 0:
 		parent.move_child(node, mini(index, parent.get_child_count() - 1))
 
-func _move(node: Node, parent: Node, scene_root: Node, index: int, transform: Transform3D, owned: Array) -> void:
+func _move(node: Node, parent: Node, scene_root: Node, index: int, state: Dictionary, owned: Array) -> void:
 	node.get_parent().remove_child(node)
 	_attach(parent, node, scene_root, index, owned)
+	for key in state:
+		if key == "edit_state":
+			node._edit_set_state(state[key])
+		else:
+			node.set(key, state[key])
+
+## What reparenting can change in a node's local pose, as properties _move writes back. Undo uses raw values: a Node2D
+## transform does not round-trip through its position/rotation/scale/skew decomposition, and a Control keeps its
+## anchors, offsets, rotation and scale in the state that SceneTreeDock also uses to undo a reparent.
+static func pose(node: Node) -> Dictionary:
 	if node is Node3D:
-		node.transform = transform
+		return {"transform": node.transform}
+	if node is Node2D:
+		return {"position": node.position, "rotation": node.rotation, "scale": node.scale, "skew": node.skew}
+	if node is Control:
+		return {"edit_state": node._edit_get_state()}
+	return {}
+
+## Pose for node below parent that keeps its global transform, like Node.reparent(keep_global_transform = true):
+## Node3D and Node2D keep the whole transform, a Control only its global position. {} with `error` set on failure.
+func global_pose(node: Node, parent: Node) -> Dictionary:
+	if node is Node3D:
+		var inverse_3d := Transform3D.IDENTITY
+		if parent is Node3D and not node.top_level:
+			if absf(parent.global_transform.basis.determinant()) < 0.000001:
+				error = Wire.failure("INVALID_ARGUMENT", "Cannot invert the new parent's singular transform.")
+				return {}
+			inverse_3d = parent.global_transform.affine_inverse()
+		var transform: Transform3D = inverse_3d * node.global_transform
+		if not transform.is_finite():
+			error = Wire.failure("INVALID_ARGUMENT", "Reparent transform exceeds the engine's numeric range.")
+			return {}
+		return {"transform": transform}
+	# CanvasItems inherit transforms through a direct CanvasItem parent only.
+	var inverse_2d := Transform2D.IDENTITY
+	if parent is CanvasItem and not node.top_level:
+		if absf(parent.get_global_transform().determinant()) < 0.000001:
+			error = Wire.failure("INVALID_ARGUMENT", "Cannot invert the new parent's singular transform.")
+			return {}
+		inverse_2d = parent.get_global_transform().affine_inverse()
+	var global: Transform2D = node.get_global_transform()
+	var state := {"transform": inverse_2d * global}
+	var finite: bool = state.transform.is_finite()
+	if node is Control:
+		# The global origin also carries the pivot offset: get_transform().origin - position.
+		state = {"position": inverse_2d * global.origin - (node.get_transform().origin - node.position)}
+		finite = state.position.is_finite()
+	if not finite:
+		error = Wire.failure("INVALID_ARGUMENT", "Reparent transform exceeds the engine's numeric range.")
+		return {}
+	return state
 
 static func vector3(value: Array) -> Vector3:
 	return Vector3(value[0], value[1], value[2])

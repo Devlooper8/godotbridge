@@ -101,7 +101,9 @@ python -m build
 
 Integration tests launch an actual isolated Godot editor and clean up their own
 processes. Graphical tests verify PNG dimensions and MCP images; headless tests
-verify explicit partial snapshots. They are opt-in when running pytest directly
+verify explicit partial snapshots. A few engine tests need no editor window: they run
+`godot --headless --script tests/harness/<name>.gd` against a project copy to drive the
+transport alone. All of them are opt-in when running pytest directly
 (`--engine`, `--graphical`). Set `GODOT_EXECUTABLE` if discovery cannot locate your
 engine. Regenerate schemas after model changes: `python scripts/sync_schema.py`.
 

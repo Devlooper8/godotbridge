@@ -1,5 +1,6 @@
 """Install the addon without overwriting unrelated or running editor files."""
 
+import dataclasses
 import json
 import shutil
 from pathlib import Path
@@ -20,7 +21,8 @@ def install(config: Config, *, replace: bool = False) -> dict:
         from .transport import Transport
 
         try:
-            Transport(config).request("handshake", {})
+            # A liveness probe, not an operation: a stale file must not make it wait.
+            Transport(dataclasses.replace(config, connect_wait=0.0)).request("handshake", {})
         except BridgeError as exc:
             if exc.code != "EDITOR_DISCONNECTED":
                 raise
