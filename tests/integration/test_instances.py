@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 from helpers import read, rejected, write
 
@@ -343,3 +345,224 @@ def test_dependency_cap_fails_closed(host):
     )
     write(host, "scenes/heavy.tscn", "[gd_scene load_steps=2 format=3]\n\n" + header + lines[0])
     rejected(host, "node.instantiate", "INVALID_ARGUMENT", scene="res://scenes/heavy.tscn")
+
+
+MESHED = """[gd_scene load_steps=2 format=3]
+
+[sub_resource type="BoxMesh" id="BoxMesh_a"]
+size = Vector3({size}, {size}, {size})
+
+[node name="Meshed" type="Node3D"]
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_a")
+"""
+LATE_SCENE = """[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/late_tool.gd" id="1"]
+
+[node name="Late" type="Node3D"]
+script = ExtResource("1")
+"""
+
+
+def mesh_size(editor, path):
+    mesh = editor.call("node.get_property", path=path, property="mesh")["value"]
+    return mesh["properties"]["size"]["value"]
+
+
+def test_instantiate_reads_scene_edited_on_disk(host):
+    # The loader reuses a cached sub-resource while any instance (or an undo step) holds it.
+    write(host, "scenes/meshed.tscn", MESHED.format(size=1))
+    host.call("node.instantiate", scene="res://scenes/meshed.tscn", name="Old")
+    write(host, "scenes/meshed.tscn", MESHED.format(size=5))
+    host.call("node.instantiate", scene="res://scenes/meshed.tscn", name="New")
+    assert mesh_size(host, "New/Mesh") == [5, 5, 5]
+    assert mesh_size(host, "Old/Mesh") == [1, 1, 1]
+
+
+def test_instantiate_rechecks_tool_script_edited_on_disk(host):
+    write(host, "scripts/late_tool.gd", "extends Node3D\n")
+    write(host, "scenes/late.tscn", LATE_SCENE)
+    host.call("node.instantiate", scene="res://scenes/late.tscn", name="Before")
+    # The cached script of the live node above is still the non-@tool version.
+    write(host, "scripts/late_tool.gd", TOOLED)
+    rejected(host, "node.instantiate", "READ_ONLY_RESOURCE", scene="res://scenes/late.tscn")
+    host.call(
+        "node.instantiate", scene="res://scenes/late.tscn", name="After", allow_tool_script=True
+    )
+
+
+def test_instantiate_rechecks_cached_tool_script_dropped_on_disk(host):
+    write(host, "scripts/cached_tool.gd", TOOLED)
+    write(
+        host,
+        "scripts/cached_user.gd",
+        'extends Node3D\nconst Base = preload("res://scripts/cached_tool.gd")\n',
+    )
+    write(host, "scenes/cached.tscn", script_scene("cached_user"))
+    host.call(
+        "node.instantiate", scene="res://scenes/cached.tscn", name="Live", allow_tool_script=True
+    )
+    # The live node keeps the @tool version cached and a new instance would get that script, not the file's. No
+    # node carries the script itself, so only the cached-script check can see it.
+    write(host, "scripts/cached_tool.gd", "extends Node3D\n")
+    rejected(host, "node.instantiate", "READ_ONLY_RESOURCE", scene="res://scenes/cached.tscn")
+
+
+TOOLED_UID = "uid://b8v13tooled01"
+HOST_UID = "uid://b8v13hosttscn1"
+
+
+def script_scene(script):
+    return (
+        '[gd_scene load_steps=2 format=3]\n\n[ext_resource type="Script" '
+        f'path="res://scripts/{script}.gd" id="1"]\n\n[node name="N" type="Node3D"]\n'
+        'script = ExtResource("1")\n'
+    )
+
+
+def seed_uid_references(config):
+    # The engine only learns a uid from a sidecar that exists when the editor starts.
+    project = SimpleNamespace(config=config)
+    write(project, "scripts/tooled.gd", TOOLED)
+    write(project, "scripts/tooled.gd.uid", TOOLED_UID + "\n")
+    write(project, "scripts/via_preload.gd", f'extends Node3D\nconst T = preload("{TOOLED_UID}")\n')
+    write(
+        project,
+        "scripts/via_load.gd",
+        f'extends Node3D\nfunc f():\n\treturn load("{TOOLED_UID}")\n',
+    )
+    write(
+        project,
+        "scenes/host.tscn",
+        f'[gd_scene format=3 uid="{HOST_UID}"]\n\n[node name="Host" type="Node3D"]\n',
+    )
+    write(project, "scripts/rec.gd", f'extends Node3D\nfunc f():\n\treturn load("{HOST_UID}")\n')
+    for script in ["via_preload", "via_load", "rec"]:
+        write(project, f"scenes/{script}.tscn", script_scene(script))
+
+
+def test_uid_references_in_scripts_are_followed(extra_editor):
+    with extra_editor(seed_uid_references) as client:
+        client.call("scene.open", path="res://scenes/host.tscn")
+        for script in ["via_preload", "via_load"]:
+            rejected(
+                client,
+                "node.instantiate",
+                "READ_ONLY_RESOURCE",
+                scene=f"res://scenes/{script}.tscn",
+            )
+        client.call(
+            "node.instantiate", scene="res://scenes/via_preload.tscn", allow_tool_script=True
+        )
+        rejected(client, "node.instantiate", "INVALID_ARGUMENT", scene="res://scenes/rec.tscn")
+
+
+def gd_string(source):
+    """GDScript source as the value of a scene file's script/source property."""
+    return '"' + source.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def marker_script(marker, base="Node3D", class_name=None):
+    """A @tool script that leaves a file behind. _static_init runs as soon as the script loads, _init only for
+    instances that are not placeholders, so the marker also shows a script that was loaded and never instantiated."""
+    body = f'\tFileAccess.open("res://{marker}", FileAccess.WRITE).store_string("ran")\n'
+    named = f"class_name {class_name}\n" if class_name else ""
+    return (
+        f"@tool\n{named}extends {base}\nstatic func _static_init():\n{body}\nfunc _init():\n{body}"
+    )
+
+
+def embedded_scene(source, node_script=True):
+    """A scene whose only script is a GDScript sub_resource, as a node script or as a resource's script."""
+    if node_script:
+        return (
+            '[gd_scene load_steps=2 format=3]\n\n[sub_resource type="GDScript" id="G"]\n'
+            f'script/source = {gd_string(source)}\n\n[node name="Embedded" type="Node3D"]\n'
+            'script = SubResource("G")\n'
+        )
+    return (
+        '[gd_scene load_steps=3 format=3]\n\n[sub_resource type="GDScript" id="G"]\n'
+        f'script/source = {gd_string(source)}\n\n[sub_resource type="Resource" id="R"]\n'
+        'script = SubResource("G")\n\n[node name="Embedded" type="Node3D"]\n'
+        'metadata/payload = SubResource("R")\n'
+    )
+
+
+def seed_embedded(editor, case, marker):
+    """Writes the scene for one way of hiding a @tool script inside scene files; returns its path."""
+    base = f"scripts/marker_{case}.gd"
+    # Only an embedded script extends it, so no dependency list names it.
+    write(editor, base, marker_script(marker))
+    derived = f'extends "res://{base}"\n'
+    if case == "attached":
+        scene = script_scene(f"marker_{case}")
+    elif case == "relative":
+        write(editor, "scripts/relative_derived.gd", f'extends "marker_{case}.gd"\n')
+        scene = script_scene("relative_derived")
+    elif case == "preload":
+        scene = embedded_scene(f'extends Node3D\nconst Base = preload("res://{base}")\n')
+    elif case == "node":
+        scene = embedded_scene(marker_script(marker))
+    elif case == "resource":
+        scene = embedded_scene(marker_script(marker, "Resource"), node_script=False)
+    elif case == "extends":
+        scene = embedded_scene(derived)
+    elif case == "nested":
+        write(editor, f"scenes/{case}_inner.tscn", embedded_scene(derived))
+        scene = (
+            '[gd_scene load_steps=2 format=3]\n\n[ext_resource type="PackedScene" '
+            f'path="res://scenes/{case}_inner.tscn" id="1"]\n\n[node name="Outer" type="Node3D"]\n\n'
+            '[node name="Inner" parent="." instance=ExtResource("1")]\n'
+        )
+    else:  # override: the embedded script sits on an instance of a plain scene.
+        scene = (
+            '[gd_scene load_steps=3 format=3]\n\n[ext_resource type="PackedScene" '
+            'path="res://scenes/unit.tscn" id="1"]\n\n[sub_resource type="GDScript" id="G"]\n'
+            f'script/source = {gd_string(derived)}\n\n[node name="Outer" type="Node3D"]\n\n'
+            '[node name="Unit" parent="." instance=ExtResource("1")]\nscript = SubResource("G")\n'
+        )
+    write(editor, f"scenes/{case}.tscn", scene)
+    return f"res://scenes/{case}.tscn"
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["node", "resource", "extends", "nested", "override", "attached", "relative", "preload"],
+)
+def test_tool_script_hidden_in_scene_files_needs_opt_in(host, case):
+    marker = f"ran_{case}.txt"
+    scene = seed_embedded(host, case, marker)
+    rejected(host, "node.instantiate", "READ_ONLY_RESOURCE", scene=scene)
+    # The refusal comes from the source text alone: loading a @tool script already runs its _static_init.
+    assert not (host.config.project / marker).exists(), "the script ran without the opt-in"
+    host.call("node.instantiate", scene=scene, name="Allowed", allow_tool_script=True)
+    assert (host.config.project / marker).exists()
+
+
+def seed_class_name_bases(config):
+    # The engine registers a class_name when the project is scanned, so the files must exist at startup.
+    project = SimpleNamespace(config=config)
+    write(project, "scripts/named_base.gd", marker_script("ran_named.txt", class_name="NamedBase"))
+    write(project, "scripts/named_derived.gd", "extends NamedBase\n")
+    write(project, "scenes/named_attached.tscn", script_scene("named_derived"))
+    write(project, "scenes/named_embedded.tscn", embedded_scene("extends NamedBase\n"))
+    write(project, "scenes/open.tscn", '[gd_scene format=3]\n\n[node name="Open" type="Node3D"]\n')
+
+
+@pytest.mark.parametrize("scene", ["named_attached", "named_embedded"])
+def test_tool_script_reached_through_a_class_name_needs_opt_in(extra_editor, scene):
+    with extra_editor(seed_class_name_bases) as client:
+        client.call("scene.open", path="res://scenes/open.tscn")
+        rejected(
+            client, "node.instantiate", "READ_ONLY_RESOURCE", scene=f"res://scenes/{scene}.tscn"
+        )
+        assert not (client.config.project / "ran_named.txt").exists()
+        client.call("node.instantiate", scene=f"res://scenes/{scene}.tscn", allow_tool_script=True)
+        assert (client.config.project / "ran_named.txt").exists()
+
+
+def test_plain_script_embedded_in_a_scene_needs_no_opt_in(host):
+    write(host, "scenes/plain_embedded.tscn", embedded_scene("extends Node3D\nvar answer = 42\n"))
+    host.call("node.instantiate", scene="res://scenes/plain_embedded.tscn", name="Plain")

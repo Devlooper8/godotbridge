@@ -29,6 +29,19 @@ def test_project_validation_and_script_checks(editor):
         (scripts / "bad.gd").unlink()
 
 
+def test_project_validation_skips_gdignore_directories(editor):
+    ignored = editor.config.project / "ignored-by-godot"
+    ignored.mkdir()
+    try:
+        (ignored / ".gdignore").write_text("", encoding="utf-8")
+        (ignored / "broken.gd").write_text(
+            "extends Node3D\nthis is invalid syntax\n", encoding="utf-8"
+        )
+        assert editor.call("project.validate")["validation"]["valid"]
+    finally:
+        shutil.rmtree(ignored)
+
+
 def test_import_refuses_live_editor(editor):
     with pytest.raises(BridgeError) as caught:
         editor.call("project.import")

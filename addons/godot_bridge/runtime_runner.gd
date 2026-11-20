@@ -3,7 +3,7 @@ extends SceneTree
 ## The only IPC command accepted here is capture into this run's private directory.
 
 var run_directory := ""
-var elapsed := 0.0
+var last_poll := 0
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
@@ -20,11 +20,12 @@ func _start_scene(path: String) -> void:
 		push_error("GodotBridge could not run scene: " + error_string(err))
 		quit(1)
 
-func _process(delta: float) -> bool:
-	elapsed += delta
-	if elapsed < 0.1:
+func _process(_delta: float) -> bool:
+	# Unscaled time: a game that sets Engine.time_scale = 0 would otherwise never service a capture.
+	var now := Time.get_ticks_msec()
+	if now - last_poll < 100:
 		return false
-	elapsed = 0
+	last_poll = now
 	var request := run_directory.path_join("capture.request")
 	if FileAccess.file_exists(request):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(request))
